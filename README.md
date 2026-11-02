@@ -1,1 +1,163 @@
-# RISR-Advancement-Dashboard
+# RISR Advancement Dashboard
+
+Internal dashboard for the Admissions & Advancement office at Ruamrudee International School Ratchapruek. The first tab is **Tours/Visits**. It reads tour registrations from OpenApply, merges them with the School Tour/Visit Google Calendar, and keeps a master Google Sheet. Seth Janekarnkit marks “Did Not Attend” in OpenApply by hand. This app never writes to OpenApply.
+
+All times are **Asia/Bangkok (ICT)**. The interface is in English.
+
+## Stack
+
+- Next.js (App Router) and TypeScript
+- Tailwind CSS
+- API routes on the server, so OpenApply and Google secrets never reach the browser
+- Vitest for the tour rules
+- Recharts for the analytics window
+
+## Sample data
+
+If OpenApply or Google credentials are missing, the app starts in **sample data** mode. The families are fictional. Set `MOCK_MODE=true` to force sample data even when credentials exist, or `MOCK_MODE=false` to require live credentials.
+
+```bash
+npm install
+npm test
+npm run dev
+```
+
+Open http://localhost:3000.
+
+## Configuration
+
+Copy the variable names into `.env.local`:
+
+```bash
+cp .env.example .env.local
+```
+
+`.env.example` lists names only. Defaults for non-secret values live in `src/config/dashboard.config.ts`.
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENAPPLY_CLIENT_ID` / `OPENAPPLY_CLIENT_SECRET` | OAuth client credentials. Read-only. |
+| `OPENAPPLY_BASE_URL` | Defaults to `https://risr.openapply.com/api/v3`. |
+| `OPENAPPLY_TOKEN_URL` | Defaults to `https://risr.openapply.com/oauth/token`. |
+| `OPENAPPLY_TOUR_EVENT_IDS` | Comma-separated event ids. Default `22964,22965,23638,24622` (PreK/KG, ES/MS/HS, previous PreK/KG 10am, School Break). |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth web client for `admissions@risr.ac.th`. |
+| `GOOGLE_REDIRECT_URI` | Defaults to `http://localhost:3000/api/auth/google/callback`. |
+| `GOOGLE_REFRESH_TOKEN` | Optional. After the first browser sign-in the refresh token is also stored in `data/google-oauth.json` (gitignored). |
+| `SESSION_SECRET` | Signs the sign-in cookie. Required before Google sign-in. |
+| `GOOGLE_CALENDAR_ID` | School Tour/Visit calendar. |
+| `GOOGLE_ORGANIZER_EMAIL` | Must be the signed-in account. Default `admissions@risr.ac.th`. |
+| `GOOGLE_GUEST_EMAILS` | Default `sethj@risr.ac.th,passarananv@risr.ac.th`. |
+| `GOOGLE_NOTES_TEMPLATE_DOC_ID` | Doc that is copied for each new tour. |
+| `GOOGLE_MASTER_SHEET_ID` | Existing master spreadsheet. Leave blank to find or create “RISR Advancement Dashboard”. |
+| `GOOGLE_MASTER_SHEET_NAME` | Name used when the sheet is created or searched for. |
+| `MOCK_MODE` | `true` or `false`. Blank follows the rule above. |
+
+## OpenApply credentials
+
+1. In OpenApply, create an OAuth client that can use the client-credentials grant for the school API.
+2. Put the client id and secret in `.env.local`.
+3. Confirm the tour event ids. Change `OPENAPPLY_TOUR_EVENT_IDS` or `src/config/dashboard.config.ts` if they change.
+
+The server requests a token with HTTP Basic auth and `grant_type=client_credentials`, caches it, and refreshes it about every 23 hours. A 401 retries once with a new token. The request uses a normal browser User-Agent because default Python clients have been rejected. The token and the secrets are never logged.
+
+The client only calls:
+
+- `POST /oauth/token`
+- `GET /events/{id}` (all registrations come back in one response)
+- `GET /students/{id}`
+
+There is no attendance field in the API, and there is no write method.
+
+## Google OAuth
+
+Use a Google Cloud project that `admissions@risr.ac.th` can authorize. An internal Workspace consent screen is the right choice for a single school account.
+
+1. Create an OAuth client of type **Web application**.
+2. Add the redirect URI, for local work `http://localhost:3000/api/auth/google/callback`.
+3. Add these scopes: openid, email, Calendar, Sheets, Drive, and Docs. Drive access is required because the notes template already exists and must be copied. `drive.file` cannot see that template.
+4. Put the client id, secret, and a long `SESSION_SECRET` in `.env.local`.
+5. Run the app and choose **Sign in with Google**. The hint is `admissions@risr.ac.th`.
+6. Calendar writes are refused for any other account.
+
+The refresh token is stored in `data/google-oauth.json`. For a server deploy, copy it into `GOOGLE_REFRESH_TOKEN` and keep `data/` on a persistent disk. Do not commit either value.
+
+### What a calendar write does
+
+- Title: `Tour (OA) - First (Preferred) Last (Grade)`. With no preferred name: `Tour (OA) - First Last (Grade)`. Siblings in one registration are one event, joined with ` & `.
+- A no-show title is `Tour (OA) [No Show] - …`.
+- Duration is 2 hours, timezone `Asia/Bangkok`.
+- Guests are the two addresses above. The organizer is the signed-in admissions account.
+- The description has one OpenApply profile link per child, a bullet `OA Registration ID: {id}`, and a note to use the notes doc. That registration id is how later syncs match the event. Older events fall back to student name plus the ICT date.
+- The event is created with the normal invite (`sendUpdates=all`). Every later edit uses `sendUpdates=none`.
+- No request adds or removes a Google Meet / conference link.
+- A notes Google Doc is copied from the template, named `Notes - Tour - Name (Grade)`, and attached as **Tour Notes**.
+
+**Copy OA tours to Calendar** shows a preview first. It creates events only for `scheduled` registrations that are missing. Canceled registrations are never created. Rescheduled or canceled tours that are already on the calendar are flagged and are not moved or deleted.
+
+**No show** renames the event, writes a log row, and leaves a reminder up until **Done**: “Remember to mark 'Did Not Attend' in OpenApply for {Name}”. Done logs “OA updated”. Undo removes the tag and logs “Undo”.
+
+## Master sheet
+
+The workbook has three tabs, and the list is the place to add a tab for a future dashboard section (`src/lib/sheet/schema.ts`):
+
+- **Tours** — one row per registration, including the notes columns.
+- **No Show Log** — No Show, OA updated, and Undo.
+- **Print** — meeting columns, frozen header, a date filter for the rolling window (14 days back through 45 days ahead, ICT), and column widths chosen for a landscape page.
+
+The Sheets API has no page-setup field, so landscape and fit-to-width are applied in two places the API does allow: the in-app **Meeting print view** (`/print`, A4 landscape, table at full width, repeating header) and the Google export link (`portrait=false` and `fitw=true`) returned with the live sheet. The Print tab’s date filter is reapplied when the dashboard refreshes the sheet.
+
+In sample mode the same three grids open from **Master sheet** and are stored in `data/mock-store.json`.
+
+## Analytics
+
+**Analytics** opens a floating window. **Dock to side** pins it. Charts: tours per month, show vs no-show, canceled rate, tour-to-application conversion, lead sources, grade mix, and host load. Each chart, and the whole panel, exports to PNG and PDF.
+
+Show rate uses past scheduled tours. A past tour without a no-show tag counts as attended. Conversion means at least one child has moved past inquiry (applied, waitlisted, admitted, enrolled, declined, or withdrawn).
+
+Structured notes (grade of interest, lead source, interest 1–5, concerns, next step, tour guide, comment) save to the Tours sheet and are appended to that tour’s notes doc.
+
+## Tests
+
+```bash
+npm test
+npm run typecheck
+```
+
+Covered:
+
+- Title builder: preferred name, no preferred name, siblings, no-show tag
+- Matching: new, synced, rescheduled, canceled (with and without a calendar event), name-and-date fallback
+- Time: `10:00 AM` in ICT plus 120 minutes, midnight, noon, and a tour that crosses midnight
+
+## Deployment
+
+One long-lived Node process is the right shape. The OpenApply token cache is in memory, and the Google refresh token and sheet id live on disk unless you set the env vars.
+
+- **School VM:** `npm ci && npm run build && npm start`, with `.env.local` or real environment variables and a persistent `data/` directory.
+- **Docker:** `docker build -t risr-advancement .` then run it with the env vars and a volume mounted at `/app/data`. The image listens on port 3000.
+- **A host with an ephemeral disk** (for example Vercel): set `GOOGLE_REFRESH_TOKEN`, `GOOGLE_MASTER_SHEET_ID`, and `SESSION_SECRET`. Do not rely on `data/` surviving a restart. Run a single instance so token refresh is not raced.
+
+Set `GOOGLE_REDIRECT_URI` to the public callback URL and add that URL on the OAuth client.
+
+## Add a tab
+
+Tabs are plug-ins. Adding one is a folder plus one registry line.
+
+1. Create `src/tabs/<id>/index.ts` that exports a `TabDefinition`:
+
+   ```ts
+   export const applicationsTab = {
+     id: "applications",
+     label: "Applications",
+     href: "/applications",
+     enabled: true,
+     description: "Application pipeline.",
+     Component: ApplicationsScreen,
+   };
+   ```
+
+2. Import it in `src/tabs/registry.ts` and append it to `tabs`.
+
+`src/app/[[...slug]]/page.tsx` renders `Component` for any enabled entry. You do not add a new page file. Placeholder entries stay in the registry with `enabled: false` so the tab is visible but inert. Applications, Retention, and Analytics are reserved that way. Tour charts already open from Tours/Visits; the Analytics tab is the future full-page home.
+
+If the tab stores rows, add a sheet descriptor in `src/lib/sheet/schema.ts`. The sheet sync creates any missing tab. Keep OpenApply access in `src/lib/server/openapply.ts`, which is read-only apart from the token request.

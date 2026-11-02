@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --paper: #f3f6f8;
+  --ink: #142033;
+  --navy: #0e2744;
+  --line: #d5dee8;
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  min-height: 100vh;
+}
+
+:focus-visible {
+  outline: 2px solid #1a3d66;
+  outline-offset: 2px;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+}
+
+@page {
+  size: A4 landscape;
+  margin: 12mm;
+}
