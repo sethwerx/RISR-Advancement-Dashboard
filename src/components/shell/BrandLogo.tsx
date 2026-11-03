@@ -1,7 +1,3 @@
-"use client";
-
-import { useState } from "react";
-
 const files = {
   onDark: "/brand/logo-white.png",
   onLight: "/brand/logo-navy.png",
@@ -16,15 +12,7 @@ export function BrandLogo({
   variant?: keyof typeof files;
   className?: string;
 }) {
-  const [src, setSrc] = useState<string>(files[variant]);
-  return (
-    <img
-      src={src}
-      alt="RISR"
-      className={className}
-      onError={() => setSrc("/brand/logo.svg")}
-    />
-  );
+  return <img src={files[variant]} alt="RISR" className={className} />;
 }
 
 export function ExportBrandHeader({ label }: { label: string }) {
