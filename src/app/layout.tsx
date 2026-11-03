@@ -1,27 +1,15 @@
 import type { Metadata } from "next";
-import { Bebas_Neue, Carlito, Oswald } from "next/font/google";
 import { AppShell } from "@/components/shell/AppShell";
+import "@fontsource/bebas-neue/latin-400.css";
+import "@fontsource/oswald/latin-400.css";
+import "@fontsource/oswald/latin-500.css";
+import "@fontsource/oswald/latin-600.css";
+import "@fontsource/carlito/latin-400.css";
+import "@fontsource/carlito/latin-700.css";
 import "./globals.css";
 
-const title = Bebas_Neue({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-title",
-});
-
-const heading = Oswald({
-  subsets: ["latin"],
-  variable: "--font-heading",
-});
-
-const carlito = Carlito({
-  weight: ["400", "700"],
-  subsets: ["latin"],
-  variable: "--font-carlito",
-});
-
 export const metadata: Metadata = {
-  title: "RISR Advancement",
+  title: "RISR Advancement Office",
   description: "Admissions and advancement dashboard for Ruamrudee International School Ratchapruek.",
   robots: { index: false, follow: false },
 };
@@ -29,7 +17,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${title.variable} ${heading.variable} ${carlito.variable} font-sans antialiased`}>
+      <body className="antialiased">
         <AppShell>{children}</AppShell>
       </body>
     </html>

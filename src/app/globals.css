@@ -8,18 +8,35 @@
   --ink: #142033;
   --navy: #23355D;
   --line: #d5dee8;
-  --font-body: Calibri, var(--font-carlito), sans-serif;
+  --font-title: "Bebas Neue", sans-serif;
+  --font-heading: "Oswald", sans-serif;
+  --font-body: Calibri, "Carlito", sans-serif;
 }
 
 html,
 body {
   background: var(--paper);
   color: var(--ink);
+  font-family: var(--font-body);
+}
+
+h1,
+.font-title {
+  font-family: var(--font-title);
+  letter-spacing: 0.02em;
+}
+
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-heading {
+  font-family: var(--font-heading);
 }
 
 body {
   min-height: 100vh;
-  font-family: var(--font-body);
 }
 
 :focus-visible {

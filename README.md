@@ -1,4 +1,4 @@
-# RISR Advancement Dashboard
+# RISR Advancement Office
 
 Internal dashboard for the Admissions & Advancement office at Ruamrudee International School Ratchapruek. The first tab is **Tours/Visits**. It reads tour registrations from OpenApply, merges them with the School Tour/Visit Google Calendar, and keeps a master Google Sheet. Seth Janekarnkit marks “Did Not Attend” in OpenApply by hand. This app never writes to OpenApply.
 

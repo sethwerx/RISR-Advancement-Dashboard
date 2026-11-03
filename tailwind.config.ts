@@ -5,9 +5,9 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Calibri", "var(--font-carlito)", "sans-serif"],
-        title: ["var(--font-title)", "sans-serif"],
-        heading: ["var(--font-heading)", "sans-serif"],
+        sans: ["Calibri", "Carlito", "sans-serif"],
+        title: ["Bebas Neue", "sans-serif"],
+        heading: ["Oswald", "sans-serif"],
       },
       colors: {
         navy: {

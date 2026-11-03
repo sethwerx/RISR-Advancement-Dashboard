@@ -59,7 +59,7 @@ export default function PrintPage() {
       {error ? <p className="text-sm text-[#8d2f2f]">{error}</p> : null}
       <ExportBrandHeader label="Meeting sheet" />
       <header className="mb-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5c7388]">{dashboardConfig.school.shortName} Advancement</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5c7388]">{dashboardConfig.ui.productName}</p>
         <h2 className="font-heading text-2xl">Tours meeting sheet</h2>
         <p className="text-sm text-[#3e556c]">
           {from} to {to} · {dashboardConfig.school.timezone} · Printed {formatIctTimestamp(new Date().toISOString())}

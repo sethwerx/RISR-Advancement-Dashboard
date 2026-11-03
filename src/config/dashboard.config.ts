@@ -12,7 +12,7 @@ export const dashboardConfig = {
     timezoneLabel: "ICT",
   },
   ui: {
-    productName: "RISR Advancement",
+    productName: "RISR Advancement Office",
     userDisplayName: "Seth Janekarnkit",
     userTitle: "Head of Admissions",
   },
