@@ -15,6 +15,38 @@ export function normalizeStudentId(value: string | undefined): string | undefine
   return /^\d{5}$/.test(digits) ? digits : undefined;
 }
 
+/** OpenApply's own Student ID field is not the school ID and is never used for matching. */
+export function schoolStudentId(part: SourcePart): string | undefined {
+  if (part.source === "oa") return undefined;
+  return normalizeStudentId(part.studentId);
+}
+
+export function namesAreClose(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (levenshtein(left, right) <= 2) return true;
+  const [leftFirst, ...leftRest] = left.split(" ");
+  const [rightFirst, ...rightRest] = right.split(" ");
+  const leftLast = leftRest.join(" ");
+  const rightLast = rightRest.join(" ");
+  return Boolean(leftLast) && leftLast === rightLast && levenshtein(leftFirst, rightFirst) <= 2;
+}
+
+function levenshtein(left: string, right: string): number {
+  const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    let previous = row[0];
+    row[0] = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const current = row[j];
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + cost);
+      previous = current;
+    }
+  }
+  return row[right.length];
+}
+
 /** OA id is the number at the end of a Notion OA Profile URL, or the raw id. */
 export function extractOaId(value: string | undefined): string | undefined {
   if (!value?.trim()) return undefined;
@@ -53,10 +85,10 @@ export function joinPeople(parts: SourcePart[]): JoinedPerson[] {
 
   const byOa = new Map<string, number>();
   const byStudent = new Map<string, number>();
-  const byNameDob = new Map<string, number>();
+  const byDob = new Map<string, number[]>();
   parts.forEach((part, index) => {
     const oaId = extractOaId(part.oaId);
-    const studentId = normalizeStudentId(part.studentId);
+    const studentId = schoolStudentId(part);
     if (oaId) {
       const prior = byOa.get(oaId);
       if (prior == null) byOa.set(oaId, index);
@@ -68,12 +100,25 @@ export function joinPeople(parts: SourcePart[]): JoinedPerson[] {
       else unite(prior, index, "student-id");
     }
     if (part.dob && part.firstName && part.lastName) {
-      const key = `${normalizePersonName(part.firstName, part.lastName)}|${part.dob}`;
-      const prior = byNameDob.get(key);
-      if (prior == null) byNameDob.set(key, index);
-      else unite(prior, index, "name-dob");
+      const list = byDob.get(part.dob) ?? [];
+      list.push(index);
+      byDob.set(part.dob, list);
     }
   });
+  for (const indexes of byDob.values()) {
+    for (let i = 0; i < indexes.length; i += 1) {
+      for (let j = i + 1; j < indexes.length; j += 1) {
+        const left = indexes[i];
+        const right = indexes[j];
+        if (find(left) === find(right)) continue;
+        const leftName = normalizePersonName(parts[left].firstName, parts[left].lastName);
+        const rightName = normalizePersonName(parts[right].firstName, parts[right].lastName);
+        if (!namesAreClose(leftName, rightName)) continue;
+        if (conflicts(parts, findMembers(find, parent, left), findMembers(find, parent, right))) continue;
+        unite(left, right, "name-dob");
+      }
+    }
+  }
 
   const byName = new Map<string, number[]>();
   parts.forEach((part, index) => {
@@ -118,7 +163,7 @@ function findMembers(find: (index: number) => number, parent: number[], index: n
 }
 
 function conflicts(parts: SourcePart[], left: number[], right: number[]): boolean {
-  return conflicting(left, right, (index) => extractOaId(parts[index].oaId)) || conflicting(left, right, (index) => normalizeStudentId(parts[index].studentId));
+  return conflicting(left, right, (index) => extractOaId(parts[index].oaId)) || conflicting(left, right, (index) => schoolStudentId(parts[index]));
 }
 
 function conflicting(left: number[], right: number[], read: (index: number) => string | undefined): boolean {
@@ -144,7 +189,9 @@ function mergeCluster(parts: SourcePart[], indexes: number[], methods: Set<Match
     const part = parts[index];
     sources.push(part.source);
     oaId = oaId || extractOaId(part.oaId);
-    studentId = studentId || normalizeStudentId(part.studentId);
+    const schoolId = schoolStudentId(part);
+    if (part.source === "weena" && schoolId) studentId = schoolId;
+    else if (!studentId && schoolId) studentId = schoolId;
     dob = dob || part.dob;
     grade = grade || part.grade || "";
     enrollmentYear = enrollmentYear ?? part.enrollmentYear;

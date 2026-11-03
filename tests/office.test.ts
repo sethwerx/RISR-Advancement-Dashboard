@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sourceSheets } from "@/config/sources";
 import { categorizeWithdrawalReason } from "@/config/withdrawal-reasons";
 import { admittedStage, applicantStage, buildOfficeTabs, declineCategory, deriveOffer, scholarshipCategory } from "@/lib/office/build";
-import { extractOaId, joinPeople, normalizeStudentId } from "@/lib/office/join";
+import { extractOaId, joinPeople, namesAreClose, normalizeStudentId } from "@/lib/office/join";
 import { shouldRunScheduledSync } from "@/lib/office/schedule";
 import { fictionalParts, fictionalSnapshot } from "@/lib/office/sample";
 import type { JoinedPerson, SourcePart } from "@/lib/office/types";
@@ -21,22 +21,23 @@ function person(overrides: Partial<JoinedPerson> & Pick<JoinedPerson, "firstName
 }
 
 describe("office join", () => {
-  it("joins on OA id, then student id, then name and date of birth", () => {
+  it("joins on the OA record link, then the Weena student id, then a fuzzy name and date of birth", () => {
     const parts: SourcePart[] = [
-      { source: "oa", oaId: "55", studentId: "90021", firstName: "Ada", lastName: "Lovelace", dob: "2014-01-02", fields: { oaStatus: "pending" } },
+      { source: "oa", oaId: "55", studentId: "11111", firstName: "Ada", lastName: "Lovelace", dob: "2014-01-02", fields: { oaStatus: "pending" } },
       { source: "notion-pipeline", oaId: "https://example.com/admin/students/55", firstName: "Ada", lastName: "Lovelace", fields: { notionStatus: "Inquiry" } },
-      { source: "weena", studentId: "90021", firstName: "A.", lastName: "Lovelace", fields: { weenaNo: "1" } },
+      { source: "weena", studentId: "90021", firstName: "Adda", lastName: "Lovelace", dob: "2014-01-02", fields: { onWeena: "yes", weenaNo: "1" } },
       { source: "alumni", firstName: "Grace", lastName: "Hopper", dob: "2010-05-05", fields: { gradYear: "2026" } },
       { source: "oa", firstName: "Grace", lastName: "Hopper", dob: "2010-05-05", fields: { oaStatus: "graduated" } },
     ];
     const joined = joinPeople(parts);
-    const ada = joined.find((item) => item.firstName === "Ada");
+    const ada = joined.find((item) => item.lastName === "Lovelace");
     const grace = joined.find((item) => item.firstName === "Grace");
     expect(ada?.sources.sort()).toEqual(["notion-pipeline", "oa", "weena"]);
     expect(ada?.confidence).toBe("high");
     expect(ada?.studentId).toBe("90021");
+    expect(ada?.match).not.toBe("student-id");
     expect(grace?.match).toBe("name-dob");
-    expect(grace?.confidence).toBe("high");
+    expect(namesAreClose("adda lovelace", "ada lovelace")).toBe(true);
   });
 
   it("marks a name-only match as low confidence", () => {
@@ -69,11 +70,13 @@ describe("office tabs", () => {
 
   it("maps stages, offers, declines, and scholarship categories", () => {
     expect(applicantStage(person({ firstName: "A", lastName: "B", fields: { oaStatus: "applied" } }))).toBe("Applicant");
-    expect(applicantStage(person({ firstName: "A", lastName: "B", fields: { oaStatus: "pending" } }))).toBe("Prospect/inquiry");
+    expect(applicantStage(person({ firstName: "A", lastName: "B", fields: { oaStatus: "pending" } }))).toBe("Pending");
     expect(admittedStage(person({ firstName: "A", lastName: "B", fields: { oaStatus: "admitted" } }))).toBe("Admitted, not yet enrolled");
-    expect(declineCategory(person({ firstName: "A", lastName: "B", fields: { oaStatus: "declined", statusLevel: "Needs Not Compatible - LS" } }))).toBe("School declined (needs not met)");
-    expect(deriveOffer(person({ firstName: "A", lastName: "B", fields: { admittedDate: "2026-02-01", tags: "Conditional - Academic" } }))).toBe("Conditional");
-    expect(deriveOffer(person({ firstName: "A", lastName: "B", fields: { oaStatus: "enrolled", statusLevel: "Seat Reserved Paid (50K)" } }))).toBe("Offer accepted");
+    expect(declineCategory(person({ firstName: "A", lastName: "B", fields: { oaStatus: "declined", statusLevel: "Family Declined Offer" } }))).toBe("Canceled");
+    expect(declineCategory(person({ firstName: "A", lastName: "B", fields: { oaStatus: "declined", statusLevel: "Needs Not Compatible - LS" } }))).toBe("Declined");
+    expect(deriveOffer(person({ firstName: "A", lastName: "B", fields: { oaStatus: "admitted" } }))).toBe("Admitted");
+    expect(deriveOffer(person({ firstName: "A", lastName: "B", fields: { oaStatus: "enrolled", admittedDate: "2026-02-01" } }))).toBe("Historical admitted");
+    expect(deriveOffer(person({ firstName: "A", lastName: "B", fields: { oaStatus: "enrolled", statusLevel: "Seat Reserved Paid (50K)" } }))).toBe("");
     expect(scholarshipCategory("Diversity -30%")).toBe("Scholarship");
     expect(scholarshipCategory("Sibling")).toBe("Regular discount");
     expect(scholarshipCategory("Registration Fee Waived")).toBe("Admissions incentive");
@@ -85,7 +88,10 @@ describe("office tabs", () => {
     expect(loa?.badges).toContain("LOA");
     expect(loa?.cells["No."]).toBe("8");
     expect(list.reconciliation?.map((item) => item.label)).toEqual(["Weena (has No.)", "OA enrolled", "Notion Active"]);
-    expect(list.mismatches?.some((item) => item.name === "Chloe Nguyen")).toBe(true);
+    expect(list.mismatches?.[0]).toEqual({ name: "Ben Rahman", issue: "Active in Weena's sheet but no OA record" });
+    expect(list.rows.find((row) => row.cells.Name === "Yusuf Demir")?.cells["Student ID"]).toBe("90007");
+    expect(list.rows.find((row) => row.cells.Name === "Chloe Nguyen")?.cells["Student ID"]).toBe("");
+    expect(list.mismatches?.some((item) => item.issue.toLowerCase().includes("id mismatch"))).toBe(false);
     expect(snapshot.tabs.withdrawals.rows.some((row) => row.cells.Name === "Isla Rahman")).toBe(false);
   });
 
@@ -93,6 +99,8 @@ describe("office tabs", () => {
     expect(categorizeWithdrawalReason("Moving to another school in Bangkok")).toBe("Other School");
     expect(categorizeWithdrawalReason("Leaving Thailand")).toBe("Leaving Thailand");
     expect(categorizeWithdrawalReason("Personal")).toBe("Other");
+    expect(categorizeWithdrawalReason("")).toBe("Not stated");
+    expect(snapshot.tabs.withdrawals.rows.find((row) => row.cells.Name === "Sami Iqbal")?.cells.Reason).toBe("Not stated");
     const categories = snapshot.tabs.withdrawals.rows.map((row) => row.cells.Category);
     expect(categories).toContain("Other");
     expect(categories).toContain("Leaving Thailand");
@@ -100,9 +108,13 @@ describe("office tabs", () => {
 
   it("shows the finance list date and the known data gaps", () => {
     expect(snapshot.tabs.scholarships.note).toContain("6 March 2026");
-    expect(snapshot.tabs["canceled-declined"].gaps.some((gap) => gap.label === "Missing reasons")).toBe(true);
+    expect(snapshot.tabs["canceled-declined"].rows.some((row) => row.cells.Outcome === "Canceled")).toBe(true);
+    expect(snapshot.tabs["canceled-declined"].rows.some((row) => row.cells.Outcome === "Declined")).toBe(true);
+    expect(snapshot.tabs["canceled-declined"].rows.some((row) => row.cells.Outcome === "Not stated")).toBe(true);
     expect(snapshot.tabs.applicants.gaps.some((gap) => gap.label === "Missing Enrollment Year")).toBe(true);
-    expect(snapshot.tabs.offers.rows.some((row) => row.cells.Outcome === "Conditional")).toBe(true);
+    expect(snapshot.tabs.offers.rows.some((row) => row.cells.Outcome === "Admitted")).toBe(true);
+    expect(snapshot.tabs.offers.rows.some((row) => row.cells.Outcome === "Historical admitted")).toBe(true);
+    expect(snapshot.tabs.offers.rows.some((row) => row.cells.Outcome === "Manual tracking")).toBe(true);
   });
 
   it("does not use source spreadsheet ids as sample people", () => {

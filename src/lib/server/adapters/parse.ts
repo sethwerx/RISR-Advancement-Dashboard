@@ -47,7 +47,6 @@ export function parseOaStudents(payload: { students?: OaStudentJson[] } | OaStud
     return {
       source: "oa",
       oaId: student.id != null ? String(student.id) : undefined,
-      studentId: normalizeStudentId(String(student.student_id ?? student.custom_id ?? "")),
       firstName: student.first_name ?? "",
       lastName: student.last_name ?? "",
       dob: student.birth_date ?? undefined,
@@ -173,6 +172,7 @@ export function parseSheetTable(values: string[][], source: string, headerNeedle
         onWeena: read("No.") ? "yes" : "",
         weenaNo: read("No."),
         startDate: read("Start Date"),
+        hasWithdrawal: source === "withdrawal" ? "yes" : "",
         withdrawalReason: read("Reason Stated by Parents"),
         notifiedDate: read("Notified Date"),
         lastDay: read("Last day of School"),

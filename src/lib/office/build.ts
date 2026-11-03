@@ -68,7 +68,7 @@ export function applicantStage(person: JoinedPerson): string {
   if (oa === "applied" || /application submitted|application checked|file review/i.test(notion)) return "Applicant";
   if (/^potential/i.test(notion)) return notion;
   if (notion === "Family is Interested") return "Family is Interested";
-  if (oa === "pending") return "Prospect/inquiry";
+  if (oa === "pending") return "Pending";
   return "";
 }
 
@@ -89,29 +89,32 @@ export function admittedStage(person: JoinedPerson): string {
   return "";
 }
 
+/** Canceled = the family stopped. Declined = the school could not admit them. */
 export function declineCategory(person: JoinedPerson): string {
   const level = field(person, "statusLevel");
   const notion = `${field(person, "notionStatus")} ${field(person, "notionReason")}`;
-  if (/family declined offer/i.test(level) || /family declined offer/i.test(notion)) return "Family declined offer";
-  if (/family canceled application/i.test(level) || /not interested|cancelled but still interested|canceled/i.test(notion)) return "Family canceled application";
-  if (/needs not compatible/i.test(level) || /needs not met/i.test(notion)) return "School declined (needs not met)";
-  if (field(person, "oaStatus") === "declined") return "Other";
+  const tags = field(person, "tags");
+  const familyCanceled =
+    /family declined offer|family canceled application/i.test(level) ||
+    /family declined offer|family cancelled|family canceled|not interested/i.test(notion);
+  const schoolDeclined =
+    /needs not compatible|grade at capacity|age\/grade placement|incomplete application/i.test(level) ||
+    /needs not compatible|grade at capacity|age\/grade placement/i.test(tags) ||
+    /needs not met|not compatible/i.test(notion);
+  if (familyCanceled) return "Canceled";
+  if (schoolDeclined) return "Declined";
+  if (field(person, "oaStatus") === "declined" || /declined|cancelled|canceled/i.test(notion)) return "Not stated";
   return "";
 }
 
+/** Offers are OA Admitted, plus admitted dates and manual tracking kept after OA drops the status. */
 export function deriveOffer(person: JoinedPerson): string {
-  const tags = field(person, "tags");
-  const decision = field(person, "enrollmentDecision");
-  const level = field(person, "statusLevel");
-  const notion = field(person, "notionStatus");
-  if (/conditional/i.test(decision) || /Conditional - Academic/.test(tags)) return "Conditional";
-  if (level === "Family Declined Offer") return "Offer declined";
-  if (field(person, "oaStatus") === "enrolled" || level === "Seat Reserved Paid (50K)" || /seat reserved paid/i.test(field(person, "notionFee"))) {
-    return "Offer accepted";
-  }
-  if (field(person, "admittedDate") || field(person, "letterOffered")) return "Offer made";
-  if (/waiting for risr offer|file review/i.test(notion)) return "Offer pending";
-  if (/Seat Reserved|Seat Reservation|Waiting for Deal/.test(tags)) return "Offer made";
+  const status = field(person, "oaStatus");
+  const historical = Boolean(field(person, "admittedDate"));
+  const manual = person.sources.includes("tracking") || Boolean(field(person, "letterOffered")) || /^Admitted Y/i.test(field(person, "notionStatus"));
+  if (status === "admitted") return "Admitted";
+  if (historical) return "Historical admitted";
+  if (manual) return "Manual tracking";
   return "";
 }
 
@@ -122,6 +125,10 @@ export function scholarshipCategory(type: string): string {
   if (/sibling|family|faculty|staff|teacher|myis|sisb|alumni|mou/.test(text)) return "Regular discount";
   if (/diversity|civic|ad astra|mfa|ambassador|hhh|need|financial aid/.test(text)) return "Scholarship";
   return "Scholarship";
+}
+
+function recordStudentId(person: JoinedPerson): string {
+  return person.studentId ?? "";
 }
 
 function peopleRows(people: JoinedPerson[], include: (person: JoinedPerson) => boolean, make: (person: JoinedPerson) => OfficeRow): OfficeRow[] {
@@ -136,7 +143,7 @@ export function buildOfficeTabs(people: JoinedPerson[]): Record<OfficeTabId, Off
       row(person, {
         Name: nameOf(person),
         "OA id": person.oaId ?? "",
-        "Student ID": person.studentId ?? "",
+        "Student ID": recordStudentId(person),
         Grade: person.grade,
         "Enrollment year": person.enrollmentYear ? String(person.enrollmentYear) : "",
         Applied: field(person, "appliedDate"),
@@ -194,8 +201,8 @@ export function buildOfficeTabs(people: JoinedPerson[]): Record<OfficeTabId, Off
         Grade: person.grade,
         "Enrollment year": person.enrollmentYear ? String(person.enrollmentYear) : "",
         Declined: field(person, "declinedDate"),
-        Reason: field(person, "statusLevel") || field(person, "notionReason"),
-        Category: declineCategory(person),
+        Reason: field(person, "statusLevel") || field(person, "notionReason") || "Not stated",
+        Outcome: declineCategory(person),
         Tags: field(person, "tags"),
         "Notion reason": field(person, "notionReason"),
         "Previous school": field(person, "previousSchool"),
@@ -222,7 +229,7 @@ export function buildOfficeTabs(people: JoinedPerson[]): Record<OfficeTabId, Off
     (person) =>
         row(person, {
           "No.": field(person, "weenaNo"),
-          "Student ID": person.studentId ?? "",
+          "Student ID": recordStudentId(person),
           "OA id": person.oaId ?? "",
           Name: nameOf(person),
           Grade: person.grade,
@@ -238,20 +245,20 @@ export function buildOfficeTabs(people: JoinedPerson[]): Record<OfficeTabId, Off
   );
   const withdrawals = peopleRows(
     people,
-    (person) => Boolean(field(person, "withdrawalReason") || field(person, "withdrawnDate")),
+    (person) => person.sources.includes("withdrawal") || Boolean(field(person, "withdrawalReason") || field(person, "withdrawnDate")),
     (person) => {
       const onList = field(person, "onWeena") === "yes";
       const reason = field(person, "withdrawalReason");
       if (onList && field(person, "loa") === "yes") return row(person, { Name: "" });
       return row(person, {
-        "Student ID": person.studentId ?? "",
+        "Student ID": recordStudentId(person),
         "OA id": person.oaId ?? "",
         Name: nameOf(person),
         Grade: person.grade,
         Notified: field(person, "notifiedDate"),
         "Last day": field(person, "lastDay"),
         "Form signed": field(person, "formSigned"),
-        Reason: reason,
+        Reason: reason.trim() ? reason : "Not stated",
         Category: categorizeWithdrawalReason(reason),
         Checklist: field(person, "checklist"),
         "OA withdrawn": field(person, "withdrawnDate"),
@@ -279,7 +286,7 @@ export function buildOfficeTabs(people: JoinedPerson[]): Record<OfficeTabId, Off
     (person) => Boolean(field(person, "discountType") || field(person, "scholarshipType")),
     (person) =>
       row(person, {
-        "Student ID": person.studentId ?? "",
+        "Student ID": recordStudentId(person),
         Name: nameOf(person),
         Grade: person.grade,
         "Register year": field(person, "registerYear"),
@@ -294,17 +301,27 @@ export function buildOfficeTabs(people: JoinedPerson[]): Record<OfficeTabId, Off
   const weenaActive = people.filter((person) => field(person, "weenaNo")).length;
   const oaEnrolled = people.filter((person) => field(person, "oaStatus") === "enrolled").length;
   const notionActive = people.filter((person) => field(person, "notionEnrollment") === "Active").length;
-  const mismatches = people.flatMap((person) => {
-    const issues: string[] = [];
-    if (field(person, "oaStatus") === "enrolled" && field(person, "onWeena") !== "yes") issues.push("OA enrolled, missing on the Weena list");
-    if (field(person, "weenaNo") && field(person, "oaStatus") !== "enrolled" && field(person, "loa") !== "yes") issues.push("Numbered on the Weena list, not OA enrolled");
-    if (field(person, "notionEnrollment") === "Active" && !field(person, "weenaNo")) issues.push("Notion Active, missing a Weena No.");
-    return issues.map((issue) => ({ name: nameOf(person), issue }));
-  });
+  const hasOaRecord = (person: JoinedPerson) => person.sources.includes("oa") || Boolean(person.oaId);
+  const mismatches = people
+    .flatMap((person) => {
+      const issues: { name: string; issue: string; priority: number }[] = [];
+      if (field(person, "weenaNo") && !hasOaRecord(person)) {
+        issues.push({ name: nameOf(person), issue: "Active in Weena's sheet but no OA record", priority: 0 });
+      }
+      if (field(person, "oaStatus") === "enrolled" && field(person, "onWeena") !== "yes") {
+        issues.push({ name: nameOf(person), issue: "OA enrolled, missing on the Weena list", priority: 1 });
+      }
+      if (field(person, "notionEnrollment") === "Active" && !field(person, "weenaNo")) {
+        issues.push({ name: nameOf(person), issue: "Notion Active, missing a Weena No.", priority: 2 });
+      }
+      return issues;
+    })
+    .sort((left, right) => left.priority - right.priority)
+    .map(({ name, issue }) => ({ name, issue }));
 
   const missingYear = people.filter((person) => person.sources.includes("notion-pipeline") && person.enrollmentYear == null).length;
   const notionUnlinked = people.filter((person) => person.sources.includes("notion-pipeline") && !person.oaId).length;
-  const missingReasons = declined.filter((item) => !item.cells.Reason).length;
+  const missingReasons = declined.filter((item) => item.cells.Outcome === "Not stated").length;
   const missingAssessmentDates = assessments.filter((item) => !item.cells["Assessment date"]).length;
 
   return {
@@ -356,15 +373,15 @@ export function buildOfficeTabs(people: JoinedPerson[]): Record<OfficeTabId, Off
     "canceled-declined": tab({
       id: "canceled-declined",
       title: "Canceled/Declined",
-      columns: ["Name", "OA id", "Grade", "Enrollment year", "Declined", "Reason", "Category", "Tags", "Notion reason", "Previous school"],
+      columns: ["Name", "OA id", "Grade", "Enrollment year", "Declined", "Reason", "Outcome", "Tags", "Notion reason", "Previous school"],
       rows: declined,
       kpis: [
-        { id: "family", label: "Family", value: String(declined.filter((item) => item.cells.Category.startsWith("Family")).length), chartId: "by-category" },
-        { id: "school", label: "School declined", value: String(declined.filter((item) => item.cells.Category.startsWith("School")).length), chartId: "by-category" },
-        { id: "blank", label: "No reason", value: String(missingReasons), chartId: "by-category" },
+        { id: "canceled", label: "Canceled", value: String(declined.filter((item) => item.cells.Outcome === "Canceled").length), chartId: "by-category" },
+        { id: "declined", label: "Declined", value: String(declined.filter((item) => item.cells.Outcome === "Declined").length), chartId: "by-category" },
+        { id: "unstated", label: "Not stated", value: String(missingReasons), chartId: "by-category" },
       ],
-      charts: [chart("by-category", "Declines by category", countBy(declined, "Category")), chart("by-year", "Declines by enrollment year", countBy(declined, "Enrollment year"))],
-      gaps: [{ label: "Missing reasons", detail: `${missingReasons} declined rows have no OA status level and no Notion reason.` }],
+      charts: [chart("by-category", "Canceled vs declined", countBy(declined, "Outcome")), chart("by-year", "By enrollment year", countBy(declined, "Enrollment year"))],
+      gaps: [{ label: "Reason not stated", detail: `${missingReasons} rows do not say whether the family canceled or the school declined. They are shown as Not stated.` }],
     }),
     offers: tab({
       id: "offers",
@@ -372,12 +389,12 @@ export function buildOfficeTabs(people: JoinedPerson[]): Record<OfficeTabId, Off
       columns: ["Name", "Grade", "Offer date", "Decision", "Signatures", "Seat reservation", "Scholarship", "Outcome"],
       rows: offers,
       kpis: [
-        { id: "made", label: "Offer made", value: String(offers.filter((item) => item.cells.Outcome === "Offer made").length), chartId: "by-outcome" },
-        { id: "accepted", label: "Accepted", value: String(offers.filter((item) => item.cells.Outcome === "Offer accepted").length), chartId: "by-outcome" },
-        { id: "declined", label: "Declined", value: String(offers.filter((item) => item.cells.Outcome === "Offer declined").length), chartId: "by-outcome" },
+        { id: "admitted", label: "Admitted", value: String(offers.filter((item) => item.cells.Outcome === "Admitted").length), chartId: "by-outcome" },
+        { id: "historical", label: "Historical admitted", value: String(offers.filter((item) => item.cells.Outcome === "Historical admitted").length), chartId: "by-outcome" },
+        { id: "manual", label: "Manual tracking", value: String(offers.filter((item) => item.cells.Outcome === "Manual tracking").length), chartId: "by-outcome" },
       ],
       charts: [chart("by-outcome", "Offers by outcome", countBy(offers, "Outcome"))],
-      gaps: [{ label: "Offers are derived", detail: "OA has no offer field. Outcomes come from admitted date, seat-reservation tags, and status level. Notion Enrollment Decision is often blank." }],
+      gaps: [{ label: "Offers can leave OpenApply", detail: "Current Admitted students stay on this list. Admitted dates and manual tracking rows are kept after the OA status changes." }],
     }),
     "student-list": tab({
       id: "student-list",
@@ -409,7 +426,7 @@ export function buildOfficeTabs(people: JoinedPerson[]): Record<OfficeTabId, Off
       ],
       charts: [chart("by-reason", "Reasons by category", countBy(withdrawals, "Category")), chart("by-year", "Withdrawals by enrollment year", countBy(withdrawals, "Grade"))],
       gaps: [
-        { label: "Free-text reasons", detail: "Parent reasons are categorized through the editable mapping config. Unmatched text stays Other." },
+        { label: "Free-text reasons", detail: "A blank parent reason is Not stated, not a data gap. Other wording is categorized by the editable mapping." },
         { label: "SY2026-2027 sheet is stale", detail: "The current-year withdrawal sheet was last updated in April 2026." },
       ],
     }),

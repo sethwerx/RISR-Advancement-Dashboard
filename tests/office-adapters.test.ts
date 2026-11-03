@@ -26,7 +26,7 @@ describe("mocked source adapters", () => {
     }) as typeof fetch;
     const parts = await fetchOaStudentParts(fetchImpl, "test-token");
     expect(parts.map((part) => part.firstName)).toEqual(["Ada"]);
-    expect(parts[0].studentId).toBe("90042");
+    expect(parts[0].studentId).toBeUndefined();
     expect(parts[0].fields.nationality).toBe("Fictional");
     expect(calls.every((call) => call.method === "GET" && call.url.includes("/students?"))).toBe(true);
     expect(parseOaStudents({ students: [] })).toEqual([]);

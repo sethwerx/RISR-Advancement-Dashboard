@@ -11,7 +11,7 @@ export const withdrawalReasonMap = [
 
 export function categorizeWithdrawalReason(reason: string, rules = withdrawalReasonMap): string {
   const text = reason.trim().toLowerCase();
-  if (!text) return "";
+  if (!text) return "Not stated";
   for (const rule of rules) {
     if (rule.patterns.some((pattern) => text.includes(pattern))) return rule.category;
   }
