@@ -2,7 +2,7 @@
 
 Internal dashboard for the Admissions & Advancement office at Ruamrudee International School Ratchapruek. The first tab is **Tours/Visits**. It reads tour registrations from OpenApply, merges them with the School Tour/Visit Google Calendar, and keeps a master Google Sheet. Seth Janekarnkit marks “Did Not Attend” in OpenApply by hand. This app never writes to OpenApply.
 
-All times are **Asia/Bangkok (ICT)**. The interface is in English. Titles use Bebas Neue, headings use Oswald, and body text uses Calibri with Carlito, then sans-serif, as the fallback. The header logo is loaded from `public/brand/logo.svg` (a placeholder until the brand files arrive) and is repeated on chart and print exports.
+All times are **Asia/Bangkok (ICT)**. The interface is in English. Titles use Bebas Neue, headings use Oswald, and body text uses Calibri with Carlito, then sans-serif, as the fallback. The header uses the white logo on the navy bar. Chart and print exports use the navy logo. The favicon and other small marks use the icon. Primary navy is `#23355D`. Walk-in fields live in `src/tabs/tours/walkinForm.config.ts` and follow the inferred OpenApply tour form. Slots are 8:00 or 10:00 and last 120 minutes.
 
 ## Stack
 

@@ -3,10 +3,34 @@ import { buildDescriptionPatch, buildWalkInEventBody, sendUpdatesFor } from "@/l
 import { matchRegistrations } from "@/lib/match";
 import { notesSectionHtml, upsertNotesSection } from "@/lib/notes-format";
 import { buildDescription, buildWalkInTitle } from "@/lib/title";
-import { nextQuarterHourIct } from "@/lib/time";
-import { buildWalkInDescription, parseWalkInFields } from "@/lib/walkin";
-import { walkInFormFields } from "@/tabs/tours/walkinForm.config";
+import { walkInDurationMinutes, walkInFormFields } from "@/tabs/tours/walkinForm.config";
+import { tourInterval } from "@/lib/time";
+import { buildWalkInDescription, parseWalkInFields, walkInRecordFromFields, walkInRecordToTour, walkInTitleFor } from "@/lib/walkin";
 import type { TourNotes } from "@/lib/types";
+
+function sampleWalkIn(): Record<string, string> {
+  return {
+    event_id: "22965 Tour for Elementary, Middle or High School Program",
+    date: "2026-11-04",
+    time: "08:00 AM",
+    attendees_count: "3",
+    campus: "Ruamrudee International School, Ratchapruek Campus",
+    note: "Came to the desk.",
+    "student.first_name": "Anan",
+    "student.last_name": "Siri",
+    "student.birth_date": "2018-01-02",
+    "student.gender": "Male",
+    "student.grade": "Grade 3",
+    "student.enrollment_year": "2027",
+    "student.custom_fields.thai_nickname": "Nong",
+    "student.custom_fields.referral_source_custom": "Friends",
+    "parent.first_name": "Ada",
+    "parent.last_name": "Siri",
+    "parent.email": "ada@example.com",
+    "parent.custom_fields.mobile_phone": "+66 00 000 0000",
+    "parent.parent_role": "Mother",
+  };
+}
 
 const notes: TourNotes = {
   registrationId: 555,
@@ -31,26 +55,33 @@ describe("walk-in tours", () => {
     );
   });
 
-  it("declares the placeholder booking fields in one config", () => {
-    const names = walkInFormFields.map((field) => field.name);
-    expect(names).toEqual([
-      "parentFirstName",
-      "parentLastName",
-      "email",
-      "phone",
-      "studentFirstName",
-      "studentPreferredName",
-      "studentLastName",
-      "dateOfBirth",
-      "gradeApplyingFor",
-      "intendedStartDate",
-      "hearAbout",
-      "notes",
-    ]);
+  it("uses the inferred OpenApply tour fields, including the two-hour slots", () => {
+    expect(walkInFormFields).toHaveLength(28);
+    expect(walkInFormFields.map((field) => field.name)).toContain("student.custom_fields.referral_source_custom");
+    expect(walkInFormFields.find((field) => field.name === "time")?.options).toEqual(["08:00 AM", "10:00 AM"]);
+    expect(walkInDurationMinutes).toBe(120);
+    expect(tourInterval("2026-11-04", "08:00 AM", walkInDurationMinutes)).toEqual({
+      start: "2026-11-04T08:00:00+07:00",
+      end: "2026-11-04T10:00:00+07:00",
+    });
+    expect(tourInterval("2026-11-04", "10:00 AM", walkInDurationMinutes).end).toBe("2026-11-04T12:00:00+07:00");
   });
 
-  it("rejects a submission that skips a required field", () => {
-    expect(() => parseWalkInFields({ parentFirstName: "Ada" })).toThrow(/Parent last name/);
+  it("rejects a submission that skips a required field or uses a slot outside 8:00 and 10:00", () => {
+    expect(() => parseWalkInFields({ "parent.first_name": "Ada" })).toThrow(/Tour type is required/);
+    const values = sampleWalkIn();
+    expect(() => parseWalkInFields({ ...values, time: "09:00 AM" })).toThrow(/Time slot/);
+  });
+
+  it("books the chosen slot and uses the nickname in the walk-in title", () => {
+    const record = walkInRecordFromFields(parseWalkInFields(sampleWalkIn()), 99001, "walkin-99001");
+    expect(record.date).toBe("2026-11-04");
+    expect(record.time).toBe("08:00 AM");
+    expect(record.eventId).toBe(22965);
+    expect(walkInTitleFor(record)).toBe("Walk-in - Anan (Nong) Siri (Grade 3)");
+    const tour = walkInRecordToTour(record, null, null, null);
+    expect(tour.source).toBe("Walk-in");
+    expect(tour.endIso).toBe("2026-11-04T10:00:00+07:00");
   });
 
   it("creates a calendar body with guests, a walk-in id, and no Meet link", () => {
@@ -66,13 +97,6 @@ describe("walk-in tours", () => {
     expect(sendUpdatesFor("create")).toBe("all");
     expect(JSON.stringify(body)).toContain("99001");
     expect(JSON.stringify(body)).not.toContain("oaRegistrationId");
-  });
-
-  it("rounds the walk-in start to the next quarter hour in ICT", () => {
-    expect(nextQuarterHourIct(new Date("2026-11-03T03:01:00.000Z"))).toEqual({
-      date: "2026-11-03",
-      time: "10:15 AM",
-    });
   });
 });
 
@@ -94,25 +118,8 @@ describe("calendar notes section", () => {
   });
 
   it("keeps a walk-in id out of the OpenApply registration bullet", () => {
-    const description = buildWalkInDescription({
-      id: 99001,
-      createdAt: "2026-11-03T03:00:00.000Z",
-      parentFirstName: "Ada",
-      parentLastName: "Siri",
-      email: "ada@example.com",
-      phone: "+66 00 000 0000",
-      studentFirstName: "Anan",
-      studentPreferredName: "Nong",
-      studentLastName: "Siri",
-      dateOfBirth: "2018-01-02",
-      gradeApplyingFor: "G3",
-      intendedStartDate: "2027-08-01",
-      hearAbout: "Walk-in",
-      notes: "Came to the desk.",
-      date: "2026-11-03",
-      time: "10:15 AM",
-      calendarEventId: "walkin-99001",
-    });
+    const record = walkInRecordFromFields(parseWalkInFields(sampleWalkIn()), 99001, "walkin-99001");
+    const description = buildWalkInDescription(record);
     expect(description).toContain("Walk-in ID:");
     expect(description).toContain("99001");
     expect(description).not.toContain("OA Registration ID");
@@ -123,8 +130,8 @@ describe("calendar notes section", () => {
           id: 88001,
           eventId: 22965,
           eventLabel: "ES/MS/HS",
-          date: "2026-11-03",
-          time: "10:15 AM",
+          date: "2026-11-04",
+          time: "08:00 AM",
           state: "scheduled",
           host: "Jordan Blake",
           campus: "Ratchapruek",
@@ -150,8 +157,8 @@ describe("calendar notes section", () => {
           id: "walkin-99001",
           title: "Walk-in - Anan (Nong) Siri (G3)",
           description,
-          startIso: "2026-11-03T10:15:00+07:00",
-          endIso: "2026-11-03T12:15:00+07:00",
+          startIso: "2026-11-04T08:00:00+07:00",
+          endIso: "2026-11-04T10:00:00+07:00",
           htmlLink: "",
           registrationId: null,
           notesDocUrl: "",

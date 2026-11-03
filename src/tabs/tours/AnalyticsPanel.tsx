@@ -19,7 +19,7 @@ import { computeAnalytics, percent } from "@/lib/analytics";
 import type { TourView } from "@/lib/types";
 import { downloadPdf, downloadPng } from "@/tabs/tours/export-chart";
 
-const NAVY = "#0e2744";
+const NAVY = "#23355D";
 const TERRACOTTA = "#8d3b2f";
 const STONE = "#8a7340";
 const STEEL = "#3d6f99";

@@ -15,7 +15,7 @@ import { loadOpenApplyRegistrations } from "@/lib/server/openapply";
 import { readSheetState, writeDashboardSheet } from "@/lib/server/sheets";
 import { readWalkInFile, writeWalkInFile } from "@/lib/server/walkin-file";
 import { buildDescription, buildTourTitle, formatPersonName, notesDocumentName, withNoShowTag, withoutNoShowTag } from "@/lib/title";
-import { nextQuarterHourIct, tourInterval } from "@/lib/time";
+import { tourInterval } from "@/lib/time";
 import {
   buildWalkInDescription,
   nextWalkInId,
@@ -26,6 +26,7 @@ import {
   type WalkInInput,
   type WalkInRecord,
 } from "@/lib/walkin";
+import { walkInDurationMinutes } from "@/tabs/tours/walkinForm.config";
 import { errorMessage } from "@/lib/redact";
 import type {
   AccountState,
@@ -59,7 +60,9 @@ function toursWithWalkIns(
   docs: Record<string, NotesDoc>,
 ): TourView[] {
   const duration = getServerConfig().durationMinutes;
-  const walkIns = records.map((record) =>
+  const walkIns = records
+    .filter((record) => record.values && record.date && record.time)
+    .map((record) =>
     walkInRecordToTour(
       record,
       events.find((event) => event.id === record.calendarEventId) ?? null,
@@ -492,12 +495,10 @@ export async function createWalkIn(input: unknown): Promise<Snapshot> {
 }
 
 async function mockCreateWalkIn(values: WalkInInput): Promise<Snapshot> {
-  const duration = getServerConfig().durationMinutes;
   await updateStore((store) => {
     const id = nextWalkInId(store.walkIns ?? []);
-    const slot = nextQuarterHourIct();
-    const record = walkInRecordFromFields(values, slot, id, `walkin-${id}`);
-    const interval = tourInterval(slot.date, slot.time, duration);
+    const record = walkInRecordFromFields(values, id, `walkin-${id}`);
+    const interval = tourInterval(record.date, record.time, walkInDurationMinutes);
     const student = {
       firstName: record.studentFirstName,
       preferredName: record.studentPreferredName,
@@ -527,9 +528,8 @@ async function liveCreateWalkIn(values: WalkInInput): Promise<Snapshot> {
   const cfg = getServerConfig();
   const existing = readWalkInFile();
   const id = nextWalkInId(existing);
-  const slot = nextQuarterHourIct();
-  const record = walkInRecordFromFields(values, slot, id, "");
-  const interval = tourInterval(slot.date, slot.time, cfg.durationMinutes);
+  const record = walkInRecordFromFields(values, id, "");
+  const interval = tourInterval(record.date, record.time, walkInDurationMinutes);
   const student = {
     firstName: record.studentFirstName,
     preferredName: record.studentPreferredName,

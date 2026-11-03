@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="bg-navy-900 text-white">
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-6 px-4 py-4">
           <div className="flex items-center gap-3">
-            <BrandLogo className="h-11 w-auto bg-white" />
+            <BrandLogo variant="onDark" className="h-16 w-auto" />
             <div>
               <p className="font-title text-4xl leading-none">{dashboardConfig.ui.productName}</p>
               <p className="mt-1 text-sm text-white/75">

@@ -69,7 +69,7 @@ export default function PrintPage() {
         <thead className="bg-navy-900 text-white">
           <tr>
             {["Date", "Time", "Students", "Grade", "Host", "OA status", "State", "Calendar", "Attendance", "Next step"].map((header) => (
-              <th key={header} className="border border-[#0e2744] px-2 py-2 font-semibold">
+              <th key={header} className="border border-navy-900 px-2 py-2 font-semibold">
                 {header}
               </th>
             ))}

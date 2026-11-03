@@ -17,7 +17,7 @@ import type { NoShowAction, NoShowLogEntry, SheetLink, TourNotes, TourView } fro
 
 type SheetProps = { sheetId: number; title: string };
 
-const NAVY = { red: 14 / 255, green: 39 / 255, blue: 68 / 255 };
+const NAVY = { red: 35 / 255, green: 53 / 255, blue: 93 / 255 };
 const WHITE = { red: 1, green: 1, blue: 1 };
 
 function a1(title: string, range: string): string {

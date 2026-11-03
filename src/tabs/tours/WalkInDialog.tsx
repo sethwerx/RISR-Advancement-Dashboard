@@ -39,11 +39,11 @@ export function WalkInDialog({
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5c7388]">Tours / Visits</p>
         <h2 className="font-title text-4xl leading-none text-navy-900">New walk-in tour</h2>
         <p className="mt-2 text-sm text-[#3e556c]">
-          Books a two-hour visit starting at the next quarter-hour, ICT. The calendar title is Walk-in - First
-          (Preferred) Last (Grade). Guests are invited once. No Google Meet link is added. The row is logged with
-          source Walk-in.
+          The fields follow the OpenApply tour form. Labels and choices are inferred, so they can be edited in the form
+          config. Slots are 8:00 or 10:00 and last two hours. The calendar title is Walk-in - First (Nickname) Last
+          (Grade). The sheet row is logged with source Walk-in. No Google Meet link is added.
         </p>
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 max-h-[65vh] space-y-4 overflow-y-auto pr-1">
           {sections.map((section) => (
             <fieldset key={section.name}>
               <legend className="font-heading text-lg text-navy-900">{section.name}</legend>
@@ -89,23 +89,40 @@ function Field({
   onChange: (value: string) => void;
 }) {
   const className = "mt-1 w-full rounded border border-[#d5dee8] px-2 py-2 font-sans";
+  const choices = field.options ?? [];
   if (field.type === "textarea") {
+    return <textarea className={className} rows={3} required={field.required} value={value} onChange={(event) => onChange(event.target.value)} />;
+  }
+  if (field.type === "multiselect" && choices.length > 0) {
+    const selected = new Set(value.split(";").map((item) => item.trim()).filter(Boolean));
     return (
-      <textarea
-        className={className}
-        rows={3}
-        required={field.required}
-        placeholder={field.placeholder}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      <div className="mt-1 grid gap-1">
+        {choices.map((option) => (
+          <label key={option} className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={selected.has(option)}
+              onChange={() => {
+                const next = new Set(selected);
+                if (next.has(option)) next.delete(option);
+                else next.add(option);
+                onChange([...next].join("; "));
+              }}
+            />
+            {option}
+          </label>
+        ))}
+      </div>
     );
+  }
+  if ((field.type === "select" || field.type === "multiselect") && choices.length === 0) {
+    return <input className={className} type="text" required={field.required} value={value} placeholder="Type a value" onChange={(event) => onChange(event.target.value)} />;
   }
   if (field.type === "select") {
     return (
       <select className={className} required={field.required} value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">Select</option>
-        {(field.options ?? []).map((option) => (
+        {choices.map((option) => (
           <option key={option}>{option}</option>
         ))}
       </select>
@@ -114,9 +131,9 @@ function Field({
   return (
     <input
       className={className}
-      type={field.type}
+      type={field.type === "number" ? "number" : field.type}
+      min={field.type === "number" ? 1 : undefined}
       required={field.required}
-      placeholder={field.placeholder}
       value={value}
       onChange={(event) => onChange(event.target.value)}
     />
