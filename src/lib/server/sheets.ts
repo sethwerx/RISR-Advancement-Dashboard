@@ -314,7 +314,7 @@ export async function writeDashboardSheet(
           {
             values: [
               {
-                note: `Meeting window ${window.from} to ${window.to} (Asia/Bangkok). Print this tab landscape, fit to width. The date filter uses that window and is reapplied when the dashboard refreshes the sheet. OpenApply is never updated from here.`,
+                note: `Tours/Visits window ${window.from} to ${window.to} (Asia/Bangkok). Print this tab landscape, fit to width. The date filter uses that window and is reapplied when the dashboard refreshes the sheet. OpenApply is never updated from here.`,
               },
             ],
           },

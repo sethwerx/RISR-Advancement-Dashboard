@@ -486,7 +486,7 @@ export function SheetDialog({
       <div className="px-5 py-5">
         <h2 className="font-title text-4xl text-navy-900">Master sheet</h2>
         <p className="mt-2 text-sm text-[#3e556c]">
-          Tours holds one row per registration. No Show Log is the attendance reminder trail. Print is the meeting
+          Tours holds one row per registration. No Show Log is the attendance reminder trail. Print is the Tours/Visits
           view: frozen header, date-range filter, and columns sized for landscape fit-to-width. Future dashboard tabs
           get their own sheet tab.
           {sheetUrl ? "" : " Sample mode keeps this workbook in local sample storage."}

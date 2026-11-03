@@ -9,8 +9,8 @@ import "@fontsource/carlito/latin-700.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "RISR Advancement Office",
-  description: "Admissions and advancement dashboard for Ruamrudee International School Ratchapruek.",
+  title: "Advancement Office",
+  description: "Admissions, registration, and alumni relations dashboard for Ruamrudee International School Ratchapruek.",
   robots: { index: false, follow: false },
 };
 

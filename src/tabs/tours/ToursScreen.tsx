@@ -166,8 +166,7 @@ export function ToursScreen() {
       <div className="min-w-0 flex-1">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3 print:block">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5c7388]">Tours / Visits</p>
-            <h1 className="font-title text-5xl leading-none text-navy-900">School tours</h1>
+            <h1 className="font-title text-5xl leading-none text-navy-900">School Tours / Visits</h1>
             <p className="mt-1 max-w-2xl text-sm text-[#3e556c]">
               OpenApply registrations merged with the School Tour/Visit calendar. Times are Asia/Bangkok. Did Not
               Attend is marked in OpenApply by hand — this dashboard never writes to OpenApply.
@@ -181,7 +180,7 @@ export function ToursScreen() {
               Master sheet
             </button>
             <Link href="/print" className="rounded border border-[#d5dee8] bg-white px-3 py-2 text-sm font-semibold">
-              Meeting print view
+              Tours/Visits print view
             </Link>
             <button type="button" className="rounded bg-navy-900 px-3 py-2 text-sm font-semibold text-white" onClick={() => { setActionError(""); setWalkInOpen(true); }}>
               New Walk-in Tour

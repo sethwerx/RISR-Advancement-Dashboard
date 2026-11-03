@@ -7,12 +7,12 @@ export const dashboardConfig = {
   school: {
     name: "Ruamrudee International School Ratchapruek",
     shortName: "RISR",
-    office: "Admissions & Advancement",
+    office: "Admissions, Registration, and Alumni Relations",
     timezone: "Asia/Bangkok",
     timezoneLabel: "ICT",
   },
   ui: {
-    productName: "RISR Advancement Office",
+    productName: "Advancement Office",
     userDisplayName: "Seth Janekarnkit",
     userTitle: "Head of Admissions",
   },
@@ -50,7 +50,7 @@ export const dashboardConfig = {
     /** How far the calendar list reaches, so older registrations can still be matched. */
     calendarPastDays: 365 * 5,
     calendarFutureDays: 365 * 2,
-    /** Meeting print window, in days relative to today (Asia/Bangkok). */
+    /** Tours/Visits print window, in days relative to today (Asia/Bangkok). */
     printDaysBefore: 14,
     printDaysAfter: 45,
   },

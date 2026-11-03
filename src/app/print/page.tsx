@@ -37,9 +37,9 @@ export default function PrintPage() {
           <Link href="/" className="text-sm font-semibold text-navy-800 underline">
             Back to tours
           </Link>
-          <h1 className="mt-2 font-title text-5xl leading-none text-navy-900">Meeting print view</h1>
+          <h1 className="mt-2 font-title text-5xl leading-none text-navy-900">Tours/Visits print view</h1>
           <p className="mt-1 max-w-2xl text-sm text-[#3e556c]">
-            Landscape, frozen header, and fit to the page width. Choose the meeting date range, then print.
+            Landscape, frozen header, and fit to the page width. Choose the Tours/Visits date range, then print.
           </p>
         </div>
         <button type="button" className="rounded bg-navy-900 px-3 py-2 text-sm font-semibold text-white" onClick={() => window.print()}>
@@ -57,10 +57,10 @@ export default function PrintPage() {
         </label>
       </div>
       {error ? <p className="text-sm text-[#8d2f2f]">{error}</p> : null}
-      <ExportBrandHeader label="Meeting sheet" />
+      <ExportBrandHeader label="Tours/Visits sheet" />
       <header className="mb-3">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5c7388]">{dashboardConfig.ui.productName}</p>
-        <h2 className="font-heading text-2xl">Tours meeting sheet</h2>
+        <h2 className="font-heading text-2xl">Tours/Visits sheet</h2>
         <p className="text-sm text-[#3e556c]">
           {from} to {to} · {dashboardConfig.school.timezone} · Printed {formatIctTimestamp(new Date().toISOString())}
         </p>
