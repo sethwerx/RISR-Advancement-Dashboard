@@ -150,20 +150,20 @@ Tabs are plug-ins. Adding one is a folder plus one registry line.
 1. Create `src/tabs/<id>/index.ts` that exports a `TabDefinition`:
 
    ```ts
-   export const applicationsTab = {
-     id: "applications",
-     label: "Applications",
-     href: "/applications",
+   export const reportsTab = {
+     id: "reports",
+     label: "Reports",
+     href: "/reports",
      enabled: true,
-     description: "Application pipeline.",
-     Component: ApplicationsScreen,
+     description: "Saved reports.",
+     Component: ReportsScreen,
    };
    ```
 
 2. Import it in `src/tabs/registry.ts` and append it to `tabs`.
 
-`src/app/[[...slug]]/page.tsx` renders `Component` for any enabled entry. You do not add a new page file. Placeholder entries stay in the registry with `enabled: false` so the tab is visible but inert. Applications, Retention, and Analytics are reserved that way. Tour charts already open from Tours/Visits; the Analytics tab is the future full-page home.
+`src/app/[[...slug]]/page.tsx` renders `Component` for any enabled entry. You do not add a new page file. Placeholder entries stay in the registry with `enabled: false` so the tab is visible but inert. Retention and Analytics stay at the end that way. Tour charts already open from Tours/Visits; the Analytics tab is the future full-page home.
 
-Applicants, Student List, and Scholarships are enabled scaffolds. Each one has a Coming soon card and a fictional sample table. They do not call OpenApply, Google, or Notion yet. Applicants uses the School Admission Pipeline stages. Student List counts a student as active only when they have a No., and LOA students stay on the list. Scholarships shows applicant, grade, scholarship type, amount or percent, and status.
+The working order is Tours/Visits, Applicants, Admitted, Canceled/Declined, Student List, Withdrawals, Alumni, and Scholarships. Every tab after Tours/Visits is an enabled scaffold: a Coming soon card and a fictional sample table. They do not call OpenApply, Google, or Notion yet. Applicants uses the School Admission Pipeline stages. Student List counts a student as active only when they have a No., and LOA students stay on the list. Scholarships shows applicant, grade, scholarship type, amount or percent, and status. Labels do not put spaces around a slash.
 
 If the tab stores rows, add a sheet descriptor in `src/lib/sheet/schema.ts`. The sheet sync creates any missing tab. Keep OpenApply access in `src/lib/server/openapply.ts`, which is read-only apart from the token request.

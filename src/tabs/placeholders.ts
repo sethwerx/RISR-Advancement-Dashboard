@@ -1,13 +1,5 @@
 import type { TabDefinition } from "@/tabs/types";
 
-export const applicationsTab: TabDefinition = {
-  id: "applications",
-  label: "Applications",
-  href: "/applications",
-  enabled: false,
-  description: "Application pipeline, decisions, and enrolment follow-up.",
-};
-
 export const retentionTab: TabDefinition = {
   id: "retention",
   label: "Retention",

@@ -9,19 +9,26 @@
  * enabled. No new page file is required. If the tab stores rows, also add a
  * sheet in `src/lib/sheet/schema.ts`.
  */
+import { admittedTab } from "@/tabs/admitted";
+import { alumniTab } from "@/tabs/alumni";
 import { applicantsTab } from "@/tabs/applicants";
-import { analyticsTab, applicationsTab, retentionTab } from "@/tabs/placeholders";
+import { canceledDeclinedTab } from "@/tabs/canceled-declined";
+import { analyticsTab, retentionTab } from "@/tabs/placeholders";
 import { scholarshipsTab } from "@/tabs/scholarships";
 import { studentListTab } from "@/tabs/student-list";
 import { toursTab } from "@/tabs/tours";
+import { withdrawalsTab } from "@/tabs/withdrawals";
 import type { TabDefinition } from "@/tabs/types";
 
 export const tabs: TabDefinition[] = [
   toursTab,
   applicantsTab,
+  admittedTab,
+  canceledDeclinedTab,
   studentListTab,
+  withdrawalsTab,
+  alumniTab,
   scholarshipsTab,
-  applicationsTab,
   retentionTab,
   analyticsTab,
 ];
