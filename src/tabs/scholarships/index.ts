@@ -1,11 +1,14 @@
+import { createElement } from "react";
 import type { TabDefinition } from "@/tabs/types";
-import { ScholarshipsScreen } from "@/tabs/scholarships/ScholarshipsScreen";
+import { OfficeScreen } from "@/tabs/office/OfficeScreen";
 
 export const scholarshipsTab: TabDefinition = {
   id: "scholarships",
   label: "Scholarships",
   href: "/scholarships",
   enabled: true,
-  description: "Applicant, grade, scholarship type, amount or percent, and status. Sample data only.",
-  Component: ScholarshipsScreen,
+  description: "Finance scholarship list, with a data-as-of date.",
+  Component: function ScholarshipsScreen() {
+    return createElement(OfficeScreen, { tab: "scholarships" });
+  },
 };

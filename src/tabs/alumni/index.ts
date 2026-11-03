@@ -1,11 +1,14 @@
+import { createElement } from "react";
 import type { TabDefinition } from "@/tabs/types";
-import { AlumniScreen } from "@/tabs/alumni/AlumniScreen";
+import { OfficeScreen } from "@/tabs/office/OfficeScreen";
 
 export const alumniTab: TabDefinition = {
   id: "alumni",
   label: "Alumni",
   href: "/alumni",
   enabled: true,
-  description: "Former students. Sample data only until the live source is specified.",
-  Component: AlumniScreen,
+  description: "Graduates from the latest alumni database and OpenApply.",
+  Component: function AlumniScreen() {
+    return createElement(OfficeScreen, { tab: "alumni" });
+  },
 };

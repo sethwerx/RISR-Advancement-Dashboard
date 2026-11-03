@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, createSign, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { cookies } from "next/headers";
@@ -70,6 +70,61 @@ export function saveSheetId(id: string) {
   if (getServerConfig().google.masterSheetId) return;
   mkdirSync(path.dirname(sheetFile), { recursive: true });
   writeFileSync(sheetFile, JSON.stringify({ id }), { mode: 0o600 });
+}
+
+type ServiceAccount = { client_email: string; private_key: string };
+
+let serviceCache: { token: string; exp: number } | null = null;
+
+function loadServiceAccount(): ServiceAccount | null {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
+  if (!raw) return null;
+  const text = raw.startsWith("{") ? raw : readFileSync(raw, "utf8");
+  const parsed = JSON.parse(text) as ServiceAccount;
+  if (!parsed.client_email || !parsed.private_key) {
+    throw new HttpError(500, "The Google service account JSON is missing client_email or private_key.");
+  }
+  return parsed;
+}
+
+async function getServiceAccountToken(): Promise<string> {
+  if (serviceCache && Date.now() < serviceCache.exp - 60_000) return serviceCache.token;
+  const account = loadServiceAccount();
+  if (!account) throw new HttpError(500, "Google service account JSON is not configured.");
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const claim = Buffer.from(
+    JSON.stringify({
+      iss: account.client_email,
+      scope: "https://www.googleapis.com/auth/spreadsheets",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: now,
+      exp: now + 3600,
+    }),
+  ).toString("base64url");
+  const unsigned = `${header}.${claim}`;
+  const signature = createSign("RSA-SHA256").update(unsigned).sign(account.private_key).toString("base64url");
+  const body = new URLSearchParams({
+    grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    assertion: `${unsigned}.${signature}`,
+  });
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body,
+    cache: "no-store",
+  });
+  if (!response.ok) throw new HttpError(response.status, "Google service account token request failed.");
+  const parsed = (await response.json()) as { access_token?: string; expires_in?: number };
+  if (!parsed.access_token) throw new HttpError(500, "Google service account token response had no access token.");
+  serviceCache = { token: parsed.access_token, exp: Date.now() + (parsed.expires_in ?? 3600) * 1000 };
+  return parsed.access_token;
+}
+
+/** Service account when configured, otherwise the admissions@ OAuth refresh token. */
+export async function getSheetsToken(): Promise<string> {
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim()) return getServiceAccountToken();
+  return getGoogleAccessToken();
 }
 
 export async function getGoogleAccessToken(): Promise<string> {

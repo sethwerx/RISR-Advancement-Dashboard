@@ -50,6 +50,8 @@ cp .env.example .env.local
 | `GOOGLE_NOTES_TEMPLATE_DOC_ID` | Doc that is copied for each new tour. |
 | `GOOGLE_MASTER_SHEET_ID` | Existing master spreadsheet. Leave blank to find or create “RISR Advancement Dashboard”. |
 | `GOOGLE_MASTER_SHEET_NAME` | Name used when the sheet is created or searched for. |
+| `NOTION_TOKEN` | Notion integration token. Read-only queries of the pipeline, student list, and retention databases. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Optional. Raw JSON, or a path to a service-account key, used to read source spreadsheets and write the master sheet. If it is blank, Sheets uses the admissions@ OAuth refresh token. |
 | `MOCK_MODE` | `true` or `false`. Blank follows the rule above. |
 
 ## OpenApply credentials
@@ -164,6 +166,16 @@ Tabs are plug-ins. Adding one is a folder plus one registry line.
 
 `src/app/[[...slug]]/page.tsx` renders `Component` for any enabled entry. You do not add a new page file. Placeholder entries stay in the registry with `enabled: false` so the tab is visible but inert. Retention and Analytics stay at the end that way. Tour charts already open from Tours/Visits; the Analytics tab is the future full-page home.
 
-The working order is Tours/Visits, Applicants, Admitted, Canceled/Declined, Student List, Withdrawals, Alumni, and Scholarships. Every tab after Tours/Visits is an enabled scaffold: a Coming soon card and a fictional sample table. They do not call OpenApply, Google, or Notion yet. Applicants uses the School Admission Pipeline stages. Student List counts a student as active only when they have a No., and LOA students stay on the list. Scholarships shows applicant, grade, scholarship type, amount or percent, and status. Labels do not put spaces around a slash.
+The working order is Tours/Visits, Applicants, Assessments, Admitted, Canceled/Declined, Offers, Student List, Withdrawals, Alumni, and Scholarships. Retention and Analytics stay disabled at the end. Labels do not put spaces around a slash.
+
+## Office tabs
+
+Applicants, Assessments, Admitted, Canceled/Declined, Offers, Student List, Withdrawals, Alumni, and Scholarships read a local snapshot (`data/office-snapshot.json`, gitignored). **Refresh now**, and a weekday job at 05:55 Asia/Bangkok, rebuild that snapshot and copy one sheet per tab plus a Sync Log into the master Google spreadsheet. The same run refreshes the Tours sheet when live Google access is available.
+
+OpenApply, Notion, and the source spreadsheets are read-only. The only write is the master spreadsheet. Source file ids live in `src/config/sources.ts`. Records join on the OpenApply student id, then the 5-digit school Student ID, then name plus date of birth. A match on name alone is badged low confidence.
+
+The year filter defaults to 2026-27. On Applicants, OpenApply pending rows stay visible back to enrollment year 2021. Student List treats a row as active when it has a No.; LOA students stay listed with an LOA badge, and the page shows Weena, OpenApply enrolled, and Notion counts plus mismatches. Withdrawal reasons are categorized by `src/config/withdrawal-reasons.ts`. Offers are derived from the admitted date, seat-reservation tags, and status level. Scholarships show the Finance list date as a data-as-of note. Each tab has a data-quality panel, search, sort, a notes slide-out, and KPI cards that open a chart window with PNG and PDF export.
+
+Without `OPENAPPLY_CLIENT_ID`, `OPENAPPLY_CLIENT_SECRET`, `NOTION_TOKEN`, and Google credentials, the snapshot is fictional sample data that follows the real column names. Do not put real student records in the repo.
 
 If the tab stores rows, add a sheet descriptor in `src/lib/sheet/schema.ts`. The sheet sync creates any missing tab. Keep OpenApply access in `src/lib/server/openapply.ts`, which is read-only apart from the token request.

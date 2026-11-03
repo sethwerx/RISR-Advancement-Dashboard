@@ -1,11 +1,14 @@
+import { createElement } from "react";
 import type { TabDefinition } from "@/tabs/types";
-import { WithdrawalsScreen } from "@/tabs/withdrawals/WithdrawalsScreen";
+import { OfficeScreen } from "@/tabs/office/OfficeScreen";
 
 export const withdrawalsTab: TabDefinition = {
   id: "withdrawals",
   label: "Withdrawals",
   href: "/withdrawals",
   enabled: true,
-  description: "Students who withdrew. Sample data only until the live source is specified.",
-  Component: WithdrawalsScreen,
+  description: "Withdrawals with categorized parent reasons.",
+  Component: function WithdrawalsScreen() {
+    return createElement(OfficeScreen, { tab: "withdrawals" });
+  },
 };

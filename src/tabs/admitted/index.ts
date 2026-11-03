@@ -1,11 +1,14 @@
+import { createElement } from "react";
 import type { TabDefinition } from "@/tabs/types";
-import { AdmittedScreen } from "@/tabs/admitted/AdmittedScreen";
+import { OfficeScreen } from "@/tabs/office/OfficeScreen";
 
 export const admittedTab: TabDefinition = {
   id: "admitted",
   label: "Admitted",
   href: "/admitted",
   enabled: true,
-  description: "Admitted students. Sample data only until the live source is specified.",
-  Component: AdmittedScreen,
+  description: "Admitted students and the admit-to-enroll yield.",
+  Component: function AdmittedScreen() {
+    return createElement(OfficeScreen, { tab: "admitted" });
+  },
 };

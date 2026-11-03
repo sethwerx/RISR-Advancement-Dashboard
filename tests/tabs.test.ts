@@ -42,8 +42,10 @@ describe("scaffold tabs", () => {
     expect(tabs.map((tab) => tab.label)).toEqual([
       "Tours/Visits",
       "Applicants",
+      "Assessments",
       "Admitted",
       "Canceled/Declined",
+      "Offers",
       "Student List",
       "Withdrawals",
       "Alumni",

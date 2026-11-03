@@ -12,7 +12,9 @@
 import { admittedTab } from "@/tabs/admitted";
 import { alumniTab } from "@/tabs/alumni";
 import { applicantsTab } from "@/tabs/applicants";
+import { assessmentsTab } from "@/tabs/assessments";
 import { canceledDeclinedTab } from "@/tabs/canceled-declined";
+import { offersTab } from "@/tabs/offers";
 import { analyticsTab, retentionTab } from "@/tabs/placeholders";
 import { scholarshipsTab } from "@/tabs/scholarships";
 import { studentListTab } from "@/tabs/student-list";
@@ -23,8 +25,10 @@ import type { TabDefinition } from "@/tabs/types";
 export const tabs: TabDefinition[] = [
   toursTab,
   applicantsTab,
+  assessmentsTab,
   admittedTab,
   canceledDeclinedTab,
+  offersTab,
   studentListTab,
   withdrawalsTab,
   alumniTab,
