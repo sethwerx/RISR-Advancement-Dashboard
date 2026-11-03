@@ -1,16 +1,23 @@
 import type { Metadata } from "next";
-import { Fraunces, Source_Sans_3 } from "next/font/google";
+import { Bebas_Neue, Carlito, Oswald } from "next/font/google";
 import { AppShell } from "@/components/shell/AppShell";
 import "./globals.css";
 
-const display = Fraunces({
+const title = Bebas_Neue({
+  weight: "400",
   subsets: ["latin"],
-  variable: "--font-display",
+  variable: "--font-title",
 });
 
-const sans = Source_Sans_3({
+const heading = Oswald({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-heading",
+});
+
+const carlito = Carlito({
+  weight: ["400", "700"],
+  subsets: ["latin"],
+  variable: "--font-carlito",
 });
 
 export const metadata: Metadata = {
@@ -22,7 +29,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${display.variable} ${sans.variable} font-sans antialiased`}>
+      <body className={`${title.variable} ${heading.variable} ${carlito.variable} font-sans antialiased`}>
         <AppShell>{children}</AppShell>
       </body>
     </html>

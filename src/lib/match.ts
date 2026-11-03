@@ -71,6 +71,7 @@ export function matchRegistrations(
   const byId = new Map<number, CalendarEvent[]>();
   const unmatched: CalendarEvent[] = [];
   for (const event of events) {
+    if (event.kind === "walk-in") continue;
     const id = eventRegistrationId(event);
     if (id == null) {
       unmatched.push(event);

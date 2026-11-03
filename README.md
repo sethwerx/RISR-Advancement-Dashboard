@@ -2,7 +2,7 @@
 
 Internal dashboard for the Admissions & Advancement office at Ruamrudee International School Ratchapruek. The first tab is **Tours/Visits**. It reads tour registrations from OpenApply, merges them with the School Tour/Visit Google Calendar, and keeps a master Google Sheet. Seth Janekarnkit marks “Did Not Attend” in OpenApply by hand. This app never writes to OpenApply.
 
-All times are **Asia/Bangkok (ICT)**. The interface is in English.
+All times are **Asia/Bangkok (ICT)**. The interface is in English. Titles use Bebas Neue, headings use Oswald, and body text uses Calibri with Carlito, then sans-serif, as the fallback. The header logo is loaded from `public/brand/logo.svg` (a placeholder until the brand files arrive) and is repeated on chart and print exports.
 
 ## Stack
 
@@ -94,7 +94,11 @@ The refresh token is stored in `data/google-oauth.json`. For a server deploy, co
 
 **Copy OA tours to Calendar** shows a preview first. It creates events only for `scheduled` registrations that are missing. Canceled registrations are never created. Rescheduled or canceled tours that are already on the calendar are flagged and are not moved or deleted.
 
-**No show** renames the event, writes a log row, and leaves a reminder up until **Done**: “Remember to mark 'Did Not Attend' in OpenApply for {Name}”. Done logs “OA updated”. Undo removes the tag and logs “Undo”.
+**No show** renames the event (`sendUpdates=none`) and leaves a reminder up until **Done**: mark Did Not Attend in OpenApply. Done logs “OA updated”. Undo removes the tag and logs “Undo”. A past tour that was not marked no-show is labeled **Attended**. Older sheet values `Show` and `Showed` are read as Attended.
+
+**New Walk-in Tour** opens a form driven by `src/tabs/tours/walkinForm.config.ts`. Submitting it creates a two-hour calendar event titled `Walk-in - First (Preferred) Last (Grade)`, with the same guests and no Meet link, and logs a master-sheet row with source `Walk-in`.
+
+Each tour has a detail page. A notes panel slides out from the right; whether it is open is remembered in the browser. Drafts autosave locally. **Save** writes the structured notes into the calendar event’s Notes section (`sendUpdates=none`, conference data untouched) and into the master sheet.
 
 ## Master sheet
 
@@ -112,9 +116,9 @@ In sample mode the same three grids open from **Master sheet** and are stored in
 
 **Analytics** opens a floating window. **Dock to side** pins it. Charts: tours per month, show vs no-show, canceled rate, tour-to-application conversion, lead sources, grade mix, and host load. Each chart, and the whole panel, exports to PNG and PDF.
 
-Show rate uses past scheduled tours. A past tour without a no-show tag counts as attended. Conversion means at least one child has moved past inquiry (applied, waitlisted, admitted, enrolled, declined, or withdrawn).
+Show rate uses past scheduled tours. A past tour without a no-show tag is Attended. Conversion means at least one child has moved past inquiry (applied, waitlisted, admitted, enrolled, declined, or withdrawn).
 
-Structured notes (grade of interest, lead source, interest 1–5, concerns, next step, tour guide, comment) save to the Tours sheet and are appended to that tour’s notes doc.
+Structured notes (grade of interest, lead source, interest 1–5, concerns, next step, tour guide, comment) save into the calendar description’s Notes section and the Tours sheet.
 
 ## Tests
 

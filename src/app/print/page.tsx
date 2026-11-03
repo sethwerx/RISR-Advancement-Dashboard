@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { ExportBrandHeader } from "@/components/shell/BrandLogo";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { attendanceLabel } from "@/lib/attendance";
 import { STATE_LABEL, SYNC_LABEL } from "@/lib/constants";
 import { defaultMeetingWindow, formatIctTimestamp, formatLongDate } from "@/lib/time";
 import type { TourView, ToursResponse } from "@/lib/types";
@@ -35,7 +37,7 @@ export default function PrintPage() {
           <Link href="/" className="text-sm font-semibold text-navy-800 underline">
             Back to tours
           </Link>
-          <h1 className="mt-2 font-display text-4xl text-navy-900">Meeting print view</h1>
+          <h1 className="mt-2 font-title text-5xl leading-none text-navy-900">Meeting print view</h1>
           <p className="mt-1 max-w-2xl text-sm text-[#3e556c]">
             Landscape, frozen header, and fit to the page width. Choose the meeting date range, then print.
           </p>
@@ -55,9 +57,10 @@ export default function PrintPage() {
         </label>
       </div>
       {error ? <p className="text-sm text-[#8d2f2f]">{error}</p> : null}
+      <ExportBrandHeader label="Meeting sheet" />
       <header className="mb-3">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5c7388]">{dashboardConfig.school.shortName} Advancement</p>
-        <h2 className="font-display text-2xl">Tours meeting sheet</h2>
+        <h2 className="font-heading text-2xl">Tours meeting sheet</h2>
         <p className="text-sm text-[#3e556c]">
           {from} to {to} · {dashboardConfig.school.timezone} · Printed {formatIctTimestamp(new Date().toISOString())}
         </p>
@@ -65,7 +68,7 @@ export default function PrintPage() {
       <table className="w-full border-collapse text-left text-xs">
         <thead className="bg-navy-900 text-white">
           <tr>
-            {["Date", "Time", "Students", "Grade", "Host", "OA status", "State", "Calendar", "No show", "Next step"].map((header) => (
+            {["Date", "Time", "Students", "Grade", "Host", "OA status", "State", "Calendar", "Attendance", "Next step"].map((header) => (
               <th key={header} className="border border-[#0e2744] px-2 py-2 font-semibold">
                 {header}
               </th>
@@ -83,7 +86,7 @@ export default function PrintPage() {
               <td className="border border-[#d5dee8] px-2 py-1">{tour.statusLabel}</td>
               <td className="border border-[#d5dee8] px-2 py-1">{STATE_LABEL[tour.state]}</td>
               <td className="border border-[#d5dee8] px-2 py-1">{SYNC_LABEL[tour.syncStatus]}</td>
-              <td className="border border-[#d5dee8] px-2 py-1">{tour.noShow ? "No show" : ""}</td>
+              <td className="border border-[#d5dee8] px-2 py-1">{attendanceLabel(tour)}</td>
               <td className="border border-[#d5dee8] px-2 py-1">{tour.notes?.nextStep ?? ""}</td>
             </tr>
           ))}

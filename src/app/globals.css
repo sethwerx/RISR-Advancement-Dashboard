@@ -8,6 +8,7 @@
   --ink: #142033;
   --navy: #0e2744;
   --line: #d5dee8;
+  --font-body: Calibri, var(--font-carlito), sans-serif;
 }
 
 html,
@@ -18,6 +19,7 @@ body {
 
 body {
   min-height: 100vh;
+  font-family: var(--font-body);
 }
 
 :focus-visible {

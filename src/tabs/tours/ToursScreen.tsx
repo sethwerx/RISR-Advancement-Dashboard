@@ -4,10 +4,12 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { attendanceLabel } from "@/lib/attendance";
 import { GRADES, STATE_LABEL, SYNC_LABEL } from "@/lib/constants";
 import { formatLongDate } from "@/lib/time";
-import type { Snapshot, SyncPreview, TourNotes, TourView, ToursResponse } from "@/lib/types";
-import { DetailDialog, NoShowDialog, NotesDialog, SheetDialog, SyncDialog } from "@/tabs/tours/dialogs";
+import type { Snapshot, SyncPreview, TourView, ToursResponse } from "@/lib/types";
+import { NoShowDialog, SheetDialog, SyncDialog } from "@/tabs/tours/dialogs";
+import { WalkInDialog } from "@/tabs/tours/WalkInDialog";
 
 const AnalyticsPanel = dynamic(() => import("@/tabs/tours/AnalyticsPanel").then((mod) => mod.AnalyticsPanel), {
   ssr: false,
@@ -18,11 +20,12 @@ type Filters = {
   grade: string;
   state: string;
   sync: string;
+  attendance: string;
   from: string;
   to: string;
 };
 
-const emptyFilters: Filters = { query: "", grade: "all", state: "all", sync: "all", from: "", to: "" };
+const emptyFilters: Filters = { query: "", grade: "all", state: "all", sync: "all", attendance: "all", from: "", to: "" };
 
 async function readJson<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as T & { error?: string };
@@ -38,9 +41,8 @@ export function ToursScreen() {
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [syncOpen, setSyncOpen] = useState(false);
   const [preview, setPreview] = useState<SyncPreview | null>(null);
-  const [notesTour, setNotesTour] = useState<TourView | null>(null);
-  const [detail, setDetail] = useState<TourView | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [walkInOpen, setWalkInOpen] = useState(false);
   const [noShow, setNoShow] = useState<{ tour: TourView; phase: "confirm" | "remind" } | null>(null);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [docked, setDocked] = useState(false);
@@ -81,7 +83,6 @@ export function ToursScreen() {
   const upcoming = filtered.filter((tour) => Date.parse(tour.startIso) >= now).sort((a, b) => a.startIso.localeCompare(b.startIso));
   const past = filtered.filter((tour) => Date.parse(tour.startIso) < now).sort((a, b) => b.startIso.localeCompare(a.startIso));
   const pending = tours.filter((tour) => tour.pendingOaReminder);
-  const guides = useMemo(() => [...new Set(tours.map((tour) => tour.host).filter(Boolean))].sort(), [tours]);
 
   async function openSync() {
     setSyncOpen(true);
@@ -136,22 +137,25 @@ export function ToursScreen() {
     }
   }
 
-  async function saveNotes(tour: TourView, notes: Omit<TourNotes, "registrationId" | "updatedAt">) {
+  async function bookWalkIn(values: Record<string, string>) {
     setBusy(true);
     setActionError("");
     try {
       const snapshot = await readJson<Snapshot>(
-        await fetch(`/api/tours/${tour.registrationId}/notes`, {
-          method: "PUT",
+        await fetch("/api/tours/walk-in", {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(notes),
+          body: JSON.stringify(values),
         }),
       );
       applySnapshot(snapshot);
-      setNotesTour(null);
-      setBanner(snapshot.sheetWarning || `Saved tour notes for ${tour.displayName}.`);
+      setWalkInOpen(false);
+      const created = snapshot.tours
+        .filter((tour) => tour.source === "Walk-in")
+        .sort((a, b) => b.registrationId - a.registrationId)[0];
+      setBanner(created ? `Booked ${created.calendar?.title ?? created.displayName}. Logged with source Walk-in.` : "Walk-in tour booked.");
     } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : "Could not save notes.");
+      setActionError(reason instanceof Error ? reason.message : "Could not book the walk-in.");
     } finally {
       setBusy(false);
     }
@@ -163,7 +167,7 @@ export function ToursScreen() {
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3 print:block">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5c7388]">Tours / Visits</p>
-            <h1 className="font-display text-4xl text-navy-900">School tours</h1>
+            <h1 className="font-title text-5xl leading-none text-navy-900">School tours</h1>
             <p className="mt-1 max-w-2xl text-sm text-[#3e556c]">
               OpenApply registrations merged with the School Tour/Visit calendar. Times are Asia/Bangkok. Did Not
               Attend is marked in OpenApply by hand — this dashboard never writes to OpenApply.
@@ -179,6 +183,9 @@ export function ToursScreen() {
             <Link href="/print" className="rounded border border-[#d5dee8] bg-white px-3 py-2 text-sm font-semibold">
               Meeting print view
             </Link>
+            <button type="button" className="rounded bg-navy-900 px-3 py-2 text-sm font-semibold text-white" onClick={() => { setActionError(""); setWalkInOpen(true); }}>
+              New Walk-in Tour
+            </button>
             <button type="button" className="rounded bg-navy-900 px-3 py-2 text-sm font-semibold text-white" onClick={openSync}>
               Copy OA tours to Calendar
             </button>
@@ -257,6 +264,14 @@ export function ToursScreen() {
               <option value="canceled">Canceled in OA</option>
             </select>
           </label>
+          <label className="text-xs font-semibold text-[#5c7388]">
+            Attendance
+            <select className="mt-1 w-full rounded border border-[#d5dee8] px-2 py-2 text-sm font-normal" value={filters.attendance} onChange={(event) => setFilters({ ...filters, attendance: event.target.value })}>
+              <option value="all">All</option>
+              <option value="Attended">Attended</option>
+              <option value="No show">No show</option>
+            </select>
+          </label>
           <div className="flex items-end md:col-span-2">
             <button type="button" className="text-sm font-semibold text-navy-800 underline" onClick={() => setFilters(emptyFilters)}>
               Clear filters
@@ -270,8 +285,8 @@ export function ToursScreen() {
             No tours match these filters.
           </p>
         ) : null}
-        <TourSection title="Upcoming" tours={upcoming} onDetail={setDetail} onNotes={setNotesTour} onNoShow={(tour) => { setActionError(""); setNoShow({ tour, phase: "confirm" }); }} />
-        <TourSection title="Past" tours={past} onDetail={setDetail} onNotes={setNotesTour} onNoShow={(tour) => { setActionError(""); setNoShow({ tour, phase: "confirm" }); }} />
+        <TourSection title="Upcoming" tours={upcoming} onNoShow={(tour) => { setActionError(""); setNoShow({ tour, phase: "confirm" }); }} />
+        <TourSection title="Past" tours={past} onNoShow={(tour) => { setActionError(""); setNoShow({ tour, phase: "confirm" }); }} />
         <p className="no-print mt-4 text-xs text-[#5c7388]">
           Rescheduled and canceled tours that are already on the calendar are flagged only. Sync does not move or delete
           them. Office: {dashboardConfig.school.office}.
@@ -302,18 +317,7 @@ export function ToursScreen() {
           onDone={() => postNoShow(noShow.tour, "oa-updated")}
         />
       ) : null}
-      {notesTour ? (
-        <NotesDialog
-          key={notesTour.registrationId}
-          tour={notesTour}
-          guides={guides}
-          busy={busy}
-          error={actionError}
-          onClose={() => setNotesTour(null)}
-          onSave={(notes) => saveNotes(notesTour, notes)}
-        />
-      ) : null}
-      {detail ? <DetailDialog tour={detail} onClose={() => setDetail(null)} /> : null}
+      {walkInOpen ? <WalkInDialog busy={busy} error={actionError} onClose={() => setWalkInOpen(false)} onSubmit={bookWalkIn} /> : null}
       {sheetOpen && data ? <SheetDialog tours={data.tours} log={data.log} sheetUrl={data.sheet?.url ?? ""} onClose={() => setSheetOpen(false)} /> : null}
     </div>
   );
@@ -325,6 +329,7 @@ function matches(tour: TourView, filters: Filters): boolean {
   if (filters.grade !== "all" && !tour.students.some((student) => student.grade === filters.grade)) return false;
   if (filters.state !== "all" && tour.state !== filters.state) return false;
   if (filters.sync !== "all" && tour.syncStatus !== filters.sync) return false;
+  if (filters.attendance !== "all" && attendanceLabel(tour) !== filters.attendance) return false;
   if (filters.query.trim()) {
     const haystack = [
       tour.displayName,
@@ -344,20 +349,16 @@ function matches(tour: TourView, filters: Filters): boolean {
 function TourSection({
   title,
   tours,
-  onDetail,
-  onNotes,
   onNoShow,
 }: {
   title: string;
   tours: TourView[];
-  onDetail: (tour: TourView) => void;
-  onNotes: (tour: TourView) => void;
   onNoShow: (tour: TourView) => void;
 }) {
   if (tours.length === 0) return null;
   return (
     <section className="mb-6">
-      <h2 className="mb-2 font-display text-2xl text-navy-900">
+      <h2 className="mb-2 font-heading text-2xl text-navy-900">
         {title} <span className="text-base text-[#5c7388]">{tours.length}</span>
       </h2>
       <div className="overflow-x-auto rounded-lg border border-[#d5dee8] bg-white">
@@ -384,9 +385,9 @@ function TourSection({
                 </td>
                 <td className="whitespace-nowrap px-3 py-3 align-top">{tour.timeLabel}</td>
                 <td className="px-3 py-3 align-top">
-                  <button type="button" className="text-left font-semibold text-navy-900 underline decoration-[#d5dee8]" onClick={() => onDetail(tour)}>
+                  <Link href={`/tours/${tour.registrationId}`} className="text-left font-semibold text-navy-900 underline decoration-[#d5dee8]">
                     {tour.displayName}
-                  </button>
+                  </Link>
                 </td>
                 <td className="whitespace-nowrap px-3 py-3 align-top">{tour.gradesLabel}</td>
                 <td className="px-3 py-3 align-top">{tour.statusLabel || "—"}</td>
@@ -395,6 +396,7 @@ function TourSection({
                 <td className="px-3 py-3 align-top">
                   <div className="flex flex-wrap items-center gap-1">
                     <Chip kind={tour.syncStatus}>{SYNC_LABEL[tour.syncStatus]}</Chip>
+                    {attendanceLabel(tour) === "Attended" ? <Chip kind="attended">Attended</Chip> : null}
                     {tour.noShow ? <Chip kind="noshow">No show</Chip> : null}
                   </div>
                   {tour.syncStatus === "rescheduled" && tour.calendar ? (
@@ -415,9 +417,9 @@ function TourSection({
                   >
                     {tour.noShow ? "Undo no-show" : "No show"}
                   </button>
-                  <button type="button" className="font-semibold text-navy-800 underline" onClick={() => onNotes(tour)}>
+                  <Link href={`/tours/${tour.registrationId}`} className="font-semibold text-navy-800 underline">
                     Notes{tour.notes ? " ·" : ""}
-                  </button>
+                  </Link>
                 </td>
               </tr>
             ))}
@@ -428,13 +430,14 @@ function TourSection({
   );
 }
 
-function Chip({ kind, children }: { kind: TourView["syncStatus"] | "noshow"; children: React.ReactNode }) {
+function Chip({ kind, children }: { kind: TourView["syncStatus"] | "noshow" | "attended"; children: React.ReactNode }) {
   const tone = {
     synced: "bg-[#e5f4ec] text-[#145c38]",
     missing: "bg-[#fff4d6] text-[#7a4b00]",
     rescheduled: "bg-[#e7eef8] text-[#1d4e89]",
     canceled: "bg-[#f8e8e6] text-[#8d2f2f]",
     noshow: "bg-[#f3e6dc] text-[#7a341f]",
+    attended: "bg-[#e5f4ec] text-[#145c38]",
   }[kind];
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>{children}</span>;
 }

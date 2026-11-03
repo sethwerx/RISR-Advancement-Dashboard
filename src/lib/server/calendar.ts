@@ -1,7 +1,7 @@
 import "server-only";
 
 import { dashboardConfig } from "@/config/dashboard.config";
-import { buildEventBody, buildNoShowPatch, calendarWriteQuery } from "@/lib/calendar-payload";
+import { buildDescriptionPatch, buildEventBody, buildNoShowPatch, calendarWriteQuery } from "@/lib/calendar-payload";
 import { googleJson } from "@/lib/server/google-auth";
 import { getServerConfig } from "@/lib/server/env";
 import { extractRegistrationId } from "@/lib/title";
@@ -24,8 +24,14 @@ function mapGoogleEvent(item: GoogleEvent): CalendarEvent | null {
   const startIso = item.start?.dateTime || (item.start?.date ? `${item.start.date}T00:00:00+07:00` : "");
   const endIso = item.end?.dateTime || (item.end?.date ? `${item.end.date}T00:00:00+07:00` : "");
   if (!startIso || !endIso) return null;
+  const walkInId = item.extendedProperties?.private?.walkInId;
+  const isWalkIn = Boolean(walkInId) || /Walk-in ID:/i.test(item.description ?? "");
   const extended = item.extendedProperties?.private?.oaRegistrationId;
-  const registrationId = extended && /^\d+$/.test(extended) ? Number(extended) : extractRegistrationId(item.description);
+  const registrationId = isWalkIn
+    ? null
+    : extended && /^\d+$/.test(extended)
+      ? Number(extended)
+      : extractRegistrationId(item.description);
   const notes =
     item.attachments?.find((attachment) => attachment.title === "Tour Notes") ??
     item.attachments?.find((attachment) => attachment.fileUrl?.includes("docs.google.com"));
@@ -38,6 +44,7 @@ function mapGoogleEvent(item: GoogleEvent): CalendarEvent | null {
     htmlLink: item.htmlLink ?? "",
     registrationId,
     notesDocUrl: notes?.fileUrl ?? "",
+    kind: isWalkIn ? "walk-in" : undefined,
   };
 }
 
@@ -87,10 +94,18 @@ function buildEventBodySafe(body: Record<string, unknown>): Record<string, unkno
 }
 
 export async function patchCalendarTitle(eventId: string, title: string): Promise<void> {
+  await patchCalendarFields(eventId, buildNoShowPatch(title));
+}
+
+export async function patchCalendarDescription(eventId: string, description: string): Promise<void> {
+  await patchCalendarFields(eventId, buildDescriptionPatch(description));
+}
+
+async function patchCalendarFields(eventId: string, body: Record<string, unknown>): Promise<void> {
   const cfg = getServerConfig();
   const query = calendarWriteQuery("update", false);
   const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cfg.google.calendarId)}/events/${encodeURIComponent(eventId)}?${query}`;
-  await googleJson(url, { method: "PATCH", body: JSON.stringify(buildNoShowPatch(title)) });
+  await googleJson(url, { method: "PATCH", body: JSON.stringify(body) });
 }
 
 export { buildEventBody };

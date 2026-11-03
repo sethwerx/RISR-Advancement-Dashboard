@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { ExportBrandHeader } from "@/components/shell/BrandLogo";
 import {
   Bar,
   BarChart,
@@ -95,7 +96,7 @@ export function AnalyticsPanel({
         >
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">Tours / Visits</p>
-            <h2 className="font-display text-2xl leading-tight">Analytics</h2>
+            <h2 className="font-title text-4xl leading-none">Analytics</h2>
           </div>
           <div className="export-hide flex flex-wrap justify-end gap-1">
             <button type="button" className="rounded bg-white/10 px-2 py-1 text-xs" onClick={onToggleFilters}>
@@ -118,7 +119,7 @@ export function AnalyticsPanel({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
           {exportError ? <p className="text-sm text-[#8d2f2f]">{exportError}</p> : null}
           <p className="text-xs text-[#5c7388]">
-            Show rate counts past scheduled tours. A tour without a no-show tag is treated as attended. Conversion means
+            Show rate counts past scheduled tours. A tour without a no-show tag is Attended. Conversion means
             at least one child has moved past inquiry. Times are Asia/Bangkok.
           </p>
           <div className={docked ? "grid gap-3" : "grid gap-3 md:grid-cols-2"}>
@@ -131,7 +132,7 @@ export function AnalyticsPanel({
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={28} />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="showed" stackId="tours" fill={NAVY} name="Showed" />
+                    <Bar dataKey="attended" stackId="tours" fill={NAVY} name="Attended" />
                     <Bar dataKey="noShow" stackId="tours" fill={TERRACOTTA} name="No show" />
                     <Bar dataKey="canceled" stackId="tours" fill={STONE} name="Canceled" />
                     <Bar dataKey="upcoming" stackId="tours" fill={STEEL} name="Upcoming" />
@@ -140,14 +141,14 @@ export function AnalyticsPanel({
               </div>
             </ChartCard>
             <ChartCard
-              title="Show vs no-show"
+              title="Attended vs no-show"
               caption={`${percent(model.showRate.noShow, model.showRate.pastScheduled)} no-show · ${model.showRate.noShow} of ${model.showRate.pastScheduled} past scheduled tours.`}
-              filename="risr-show-rate"
+              filename="risr-attended-rate"
               onExport={exportNode}
             >
               <RatePie
                 slices={[
-                  { name: "Showed", value: model.showRate.showed, fill: NAVY },
+                  { name: "Attended", value: model.showRate.attended, fill: NAVY },
                   { name: "No show", value: model.showRate.noShow, fill: TERRACOTTA },
                 ]}
               />
@@ -222,7 +223,8 @@ function ChartCard({
     <article ref={ref} className="rounded-lg border border-[#d5dee8] bg-white p-3">
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
-          <h3 className="font-display text-xl leading-tight text-navy-900">{title}</h3>
+          <ExportBrandHeader label={title} />
+          <h3 className="font-heading text-xl leading-tight text-navy-900">{title}</h3>
           <p className="mt-1 text-xs text-[#5c7388]">{caption}</p>
         </div>
         <div className="export-hide flex gap-1">

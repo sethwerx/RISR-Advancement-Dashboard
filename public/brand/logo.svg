@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 148 40" role="img" aria-label="RISR logo placeholder">
+  <rect width="148" height="40" rx="4" fill="#ffffff"/>
+  <rect x="1.5" y="1.5" width="145" height="37" rx="3" fill="none" stroke="#0e2744" stroke-width="2"/>
+  <text x="74" y="26" text-anchor="middle" fill="#0e2744" font-family="Arial, sans-serif" font-size="18" font-weight="700">RISR</text>
+</svg>

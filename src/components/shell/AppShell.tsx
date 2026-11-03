@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { dashboardConfig } from "@/config/dashboard.config";
+import { BrandLogo } from "@/components/shell/BrandLogo";
 import { TabBar } from "@/components/shell/TabBar";
 import type { AccountState } from "@/lib/types";
 
@@ -25,11 +26,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="bg-navy-900 text-white">
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-6 px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-md border border-white/20 font-display text-2xl">
-              R
-            </div>
+            <BrandLogo className="h-11 w-auto bg-white" />
             <div>
-              <p className="font-display text-2xl leading-none">{dashboardConfig.ui.productName}</p>
+              <p className="font-title text-4xl leading-none">{dashboardConfig.ui.productName}</p>
               <p className="mt-1 text-sm text-white/75">
                 {dashboardConfig.school.office}
                 <span className="mx-2 text-white/35">·</span>

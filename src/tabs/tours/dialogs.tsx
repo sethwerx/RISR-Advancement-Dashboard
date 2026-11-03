@@ -65,7 +65,7 @@ export function SyncDialog({
   return (
     <DialogFrame title="Copy OA tours to Calendar" onClose={onClose} wide>
       <div className="border-b border-[#d5dee8] px-5 py-4">
-        <h2 className="font-display text-3xl text-navy-900">Copy OA tours to Calendar</h2>
+        <h2 className="font-title text-4xl text-navy-900">Copy OA tours to Calendar</h2>
         <p className="mt-2 text-sm text-[#3e556c]">
           New scheduled tours are created on {dashboardConfig.google.calendarName}. The organizer is{" "}
           {dashboardConfig.google.organizerEmail}. Guests: {dashboardConfig.google.guestEmails.join(", ")}. A notes doc
@@ -190,7 +190,7 @@ export function NoShowDialog({
         {reminding ? (
           <>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8d3b2f]">Attendance</p>
-            <h2 className="mt-2 font-display text-3xl leading-tight text-navy-900">
+            <h2 className="mt-2 font-title text-4xl leading-tight text-navy-900">
               Remember to mark &lsquo;Did Not Attend&rsquo; in OpenApply for {tour.displayName}
             </h2>
             <p className="mt-3 text-sm text-[#3e556c]">
@@ -209,7 +209,7 @@ export function NoShowDialog({
           </>
         ) : (
           <>
-            <h2 className="font-display text-3xl text-navy-900">
+            <h2 className="font-title text-4xl text-navy-900">
               {tour.noShow ? "Remove the no-show tag?" : "Mark this tour as a no-show?"}
             </h2>
             <p className="mt-3 text-sm text-[#3e556c]">
@@ -289,7 +289,7 @@ export function NotesDialog({
           onSave({ gradeOfInterest, leadSource, interestLevel, concerns, concernOther, nextStep, tourGuide, comment });
         }}
       >
-        <h2 className="font-display text-3xl text-navy-900">Tour notes</h2>
+        <h2 className="font-title text-4xl text-navy-900">Tour notes</h2>
         <p className="mt-1 text-sm text-[#5c7388]">
           {tour.displayName} · {tour.date}. Saved to the master sheet and appended to the tour notes doc.
         </p>
@@ -385,7 +385,7 @@ export function DetailDialog({ tour, onClose }: { tour: TourView; onClose: () =>
     <DialogFrame title="Tour details" onClose={onClose} wide>
       <div className="px-5 py-5">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5c7388]">{tour.eventLabel}</p>
-        <h2 className="mt-1 font-display text-3xl text-navy-900">{tour.displayName}</h2>
+        <h2 className="mt-1 font-title text-4xl text-navy-900">{tour.displayName}</h2>
         <p className="mt-1 text-sm text-[#3e556c]">
           {tour.date} · {tour.timeLabel} · {tour.campus} · Host {tour.host || "—"}
         </p>
@@ -484,7 +484,7 @@ export function SheetDialog({
   return (
     <DialogFrame title="Master sheet" onClose={onClose} wide>
       <div className="px-5 py-5">
-        <h2 className="font-display text-3xl text-navy-900">Master sheet</h2>
+        <h2 className="font-title text-4xl text-navy-900">Master sheet</h2>
         <p className="mt-2 text-sm text-[#3e556c]">
           Tours holds one row per registration. No Show Log is the attendance reminder trail. Print is the meeting
           view: frozen header, date-range filter, and columns sized for landscape fit-to-width. Future dashboard tabs

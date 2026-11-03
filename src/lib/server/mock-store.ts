@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { buildSeedBundle, STORE_VERSION } from "@/lib/mock/seed";
 import type { CalendarEvent, NoShowLogEntry, NotesDoc, TourNotes } from "@/lib/types";
+import type { WalkInRecord } from "@/lib/walkin";
 
 export type MockStore = {
   version: number;
@@ -11,6 +12,7 @@ export type MockStore = {
   notes: TourNotes[];
   log: NoShowLogEntry[];
   docs: Record<string, NotesDoc>;
+  walkIns: WalkInRecord[];
 };
 
 const file = path.join(process.cwd(), "data", "mock-store.json");
@@ -23,6 +25,7 @@ function fresh(): MockStore {
     notes: seed.notes,
     log: seed.log,
     docs: seed.docs,
+    walkIns: [],
   };
 }
 
@@ -44,6 +47,7 @@ export function readStore(): MockStore {
       notes: Array.isArray(parsed.notes) ? parsed.notes : store.notes,
       log: Array.isArray(parsed.log) ? parsed.log : store.log,
       docs: parsed.docs && typeof parsed.docs === "object" ? parsed.docs : store.docs,
+      walkIns: Array.isArray(parsed.walkIns) ? parsed.walkIns : [],
     };
   } catch (error) {
     if (error instanceof SyntaxError || (error as NodeJS.ErrnoException).code === "ENOENT" || (error as Error).message === "stale") {

@@ -1,10 +1,10 @@
 import "server-only";
 
-import { buildEventBody } from "@/lib/calendar-payload";
+import { buildEventBody, buildWalkInEventBody } from "@/lib/calendar-payload";
 import { buildTourViews } from "@/lib/merge";
 import { buildSeedBundle } from "@/lib/mock/seed";
-import { formatNotesBlock, initialNotesDocBody } from "@/lib/notes-format";
-import { insertCalendarEvent, listCalendarEvents, patchCalendarTitle } from "@/lib/server/calendar";
+import { formatNotesBlock, initialNotesDocBody, notesSectionHtml, upsertNotesSection } from "@/lib/notes-format";
+import { insertCalendarEvent, listCalendarEvents, patchCalendarDescription, patchCalendarTitle } from "@/lib/server/calendar";
 import { appendToDoc, copyNotesDoc, docIdFromUrl, trashFile } from "@/lib/server/docs";
 import { getServerConfig, isMockMode } from "@/lib/server/env";
 import { assertCanWrite, getGoogleEmail, readSession } from "@/lib/server/google-auth";
@@ -13,11 +13,25 @@ import { readStore, updateStore } from "@/lib/server/mock-store";
 import { validateNotes } from "@/lib/server/notes";
 import { loadOpenApplyRegistrations } from "@/lib/server/openapply";
 import { readSheetState, writeDashboardSheet } from "@/lib/server/sheets";
-import { buildDescription, buildTourTitle, notesDocumentName, withNoShowTag, withoutNoShowTag } from "@/lib/title";
+import { readWalkInFile, writeWalkInFile } from "@/lib/server/walkin-file";
+import { buildDescription, buildTourTitle, formatPersonName, notesDocumentName, withNoShowTag, withoutNoShowTag } from "@/lib/title";
+import { nextQuarterHourIct, tourInterval } from "@/lib/time";
+import {
+  buildWalkInDescription,
+  nextWalkInId,
+  parseWalkInFields,
+  walkInRecordFromFields,
+  walkInRecordToTour,
+  walkInTitleFor,
+  type WalkInInput,
+  type WalkInRecord,
+} from "@/lib/walkin";
 import { errorMessage } from "@/lib/redact";
 import type {
   AccountState,
+  CalendarEvent,
   NoShowAction,
+  NotesDoc,
   Snapshot,
   SyncApplyResult,
   SyncPreview,
@@ -37,6 +51,26 @@ function enqueue<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
+function toursWithWalkIns(
+  tours: TourView[],
+  records: WalkInRecord[],
+  events: CalendarEvent[],
+  notes: TourNotes[],
+  docs: Record<string, NotesDoc>,
+): TourView[] {
+  const duration = getServerConfig().durationMinutes;
+  const walkIns = records.map((record) =>
+    walkInRecordToTour(
+      record,
+      events.find((event) => event.id === record.calendarEventId) ?? null,
+      notes.find((note) => note.registrationId === record.id) ?? null,
+      docs[String(record.id)] ?? null,
+      duration,
+    ),
+  );
+  return [...tours, ...walkIns];
+}
+
 function mockBundle() {
   const seed = buildSeedBundle();
   const store = readStore();
@@ -48,7 +82,10 @@ function mockBundle() {
     store.docs,
     getServerConfig().durationMinutes,
   );
-  return { tours, log: store.log };
+  return {
+    tours: toursWithWalkIns(tours, store.walkIns ?? [], store.events, store.notes, store.docs),
+    log: store.log,
+  };
 }
 
 function mockSnapshot(): Snapshot {
@@ -107,7 +144,8 @@ async function loadLive(forceSheet: boolean): Promise<ToursResponse> {
     sheetWarning = errorMessage(error);
   }
   const [registrations, events] = await Promise.all([loadOpenApplyRegistrations(), listCalendarEvents()]);
-  const tours = buildTourViews(registrations, events, notes, log, {}, cfg.durationMinutes);
+  const openApplyTours = buildTourViews(registrations, events, notes, log, {}, cfg.durationMinutes);
+  const tours = toursWithWalkIns(openApplyTours, readWalkInFile(), events, notes, {});
   if (sheetReadable) {
     try {
       sheet = await writeDashboardSheet(tours, log, { force: forceSheet });
@@ -396,6 +434,10 @@ async function liveNotes(id: number, notes: ReturnType<typeof validateNotes>): P
   const current = await loadLive(false);
   const tour = requireTour(current.tours, id);
   const docId = docIdFromUrl(tour.calendar?.notesDocUrl ?? "");
+  if (tour.calendar) {
+    const description = upsertNotesSection(tour.calendar.description ?? "", notesSectionHtml(notes));
+    await patchCalendarDescription(tour.calendar.id, description);
+  }
   if (docId) {
     await appendToDoc(
       docId,
@@ -404,9 +446,9 @@ async function liveNotes(id: number, notes: ReturnType<typeof validateNotes>): P
   }
   const tours = current.tours.map((item) => (item.registrationId === id ? { ...item, notes } : item));
   let sheet = current.sheet;
-  let sheetWarning = docId
+  let sheetWarning = tour.calendar
     ? current.sheetWarning
-    : "Notes are saved on the master sheet. There is no tour notes doc until the calendar event exists.";
+    : "Notes are saved on the master sheet. There is no calendar event yet, so the Notes section could not be updated.";
   try {
     sheet = await writeDashboardSheet(tours, current.log, { force: true });
   } catch (error) {
@@ -419,6 +461,8 @@ async function mockNotes(id: number, notes: ReturnType<typeof validateNotes>): P
   const tour = requireTour(mockBundle().tours, id);
   await updateStore((store) => {
     store.notes = store.notes.filter((item) => item.registrationId !== id).concat(notes);
+    const event = store.events.find((item) => item.id === tour.calendar?.id);
+    if (event) event.description = upsertNotesSection(event.description, notesSectionHtml(notes));
     const key = String(id);
     const doc = store.docs[key];
     const block = formatNotesBlock({
@@ -431,7 +475,84 @@ async function mockNotes(id: number, notes: ReturnType<typeof validateNotes>): P
   });
   const snapshot = mockSnapshot();
   if (!tour.calendar) {
-    snapshot.sheetWarning = "Notes are saved in the sample sheet. There is no tour notes doc until the calendar event exists.";
+    snapshot.sheetWarning = "Notes are saved in the sample sheet. There is no calendar event yet, so the Notes section could not be updated.";
   }
   return snapshot;
+}
+
+export async function createWalkIn(input: unknown): Promise<Snapshot> {
+  let values: WalkInInput;
+  try {
+    values = parseWalkInFields(input);
+  } catch (error) {
+    throw new HttpError(400, error instanceof Error ? error.message : "Walk-in details are missing.");
+  }
+  if (isMockMode()) return mockCreateWalkIn(values);
+  return enqueue(() => liveCreateWalkIn(values));
+}
+
+async function mockCreateWalkIn(values: WalkInInput): Promise<Snapshot> {
+  const duration = getServerConfig().durationMinutes;
+  await updateStore((store) => {
+    const id = nextWalkInId(store.walkIns ?? []);
+    const slot = nextQuarterHourIct();
+    const record = walkInRecordFromFields(values, slot, id, `walkin-${id}`);
+    const interval = tourInterval(slot.date, slot.time, duration);
+    const student = {
+      firstName: record.studentFirstName,
+      preferredName: record.studentPreferredName,
+      lastName: record.studentLastName,
+    };
+    const docName = `Notes - Walk-in - ${formatPersonName(student)} (${record.gradeApplyingFor})`;
+    const url = `sample://notes/${id}`;
+    store.docs[String(id)] = { name: docName, url, body: initialNotesDocBody(docName) };
+    store.events.push({
+      id: record.calendarEventId,
+      title: walkInTitleFor(record),
+      description: buildWalkInDescription(record),
+      startIso: interval.start,
+      endIso: interval.end,
+      htmlLink: "",
+      registrationId: null,
+      notesDocUrl: url,
+      kind: "walk-in",
+    });
+    store.walkIns = [...(store.walkIns ?? []), record];
+  });
+  return mockSnapshot();
+}
+
+async function liveCreateWalkIn(values: WalkInInput): Promise<Snapshot> {
+  await assertCanWrite();
+  const cfg = getServerConfig();
+  const existing = readWalkInFile();
+  const id = nextWalkInId(existing);
+  const slot = nextQuarterHourIct();
+  const record = walkInRecordFromFields(values, slot, id, "");
+  const interval = tourInterval(slot.date, slot.time, cfg.durationMinutes);
+  const student = {
+    firstName: record.studentFirstName,
+    preferredName: record.studentPreferredName,
+    lastName: record.studentLastName,
+  };
+  const doc = await copyNotesDoc(`Notes - Walk-in - ${formatPersonName(student)} (${record.gradeApplyingFor})`);
+  try {
+    const created = await insertCalendarEvent(
+      buildWalkInEventBody({
+        title: walkInTitleFor(record),
+        description: buildWalkInDescription(record),
+        startIso: interval.start,
+        endIso: interval.end,
+        guests: cfg.google.guests,
+        walkInId: id,
+        notes: { fileId: doc.id, fileUrl: doc.url },
+      }),
+    );
+    record.calendarEventId = created.id;
+    writeWalkInFile([...existing, record]);
+  } catch (error) {
+    await trashFile(doc.id).catch(() => undefined);
+    throw error;
+  }
+  return loadLive(true);
 }

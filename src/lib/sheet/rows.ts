@@ -1,3 +1,4 @@
+import { attendanceLabel, normalizeAttendanceLabel } from "@/lib/attendance";
 import { SYNC_LABEL, STATE_LABEL } from "@/lib/constants";
 import { LOG_HEADERS, PRINT_HEADERS, TOUR_HEADERS } from "@/lib/sheet/schema";
 import { formatIctTimestamp } from "@/lib/time";
@@ -21,6 +22,7 @@ export function tourSheetRows(tours: TourView[]): string[][] {
     String(tour.registrationId),
     String(tour.eventId),
     tour.eventLabel,
+    tour.source,
     tour.date,
     tour.time,
     tour.endTime,
@@ -37,10 +39,10 @@ export function tourSheetRows(tours: TourView[]): string[][] {
     tour.calendar?.id ?? "",
     tour.calendar?.htmlLink ?? "",
     SYNC_LABEL[tour.syncStatus],
-    tour.noShow ? "Yes" : "No",
+    normalizeAttendanceLabel(attendanceLabel(tour)),
     tour.calendar?.notesDocUrl ?? "",
     tour.notes?.gradeOfInterest ?? "",
-    tour.notes?.leadSource ?? "",
+    tour.notes?.leadSource || tour.inquirySource || "",
     tour.notes ? String(tour.notes.interestLevel) : "",
     concerns(tour),
     tour.notes?.nextStep ?? "",
@@ -77,9 +79,9 @@ export function printSheetRows(tours: TourView[]): string[][] {
     tour.statusLabel,
     STATE_LABEL[tour.state],
     SYNC_LABEL[tour.syncStatus],
-    tour.noShow ? "No show" : "",
+    normalizeAttendanceLabel(attendanceLabel(tour)),
     tour.notes ? String(tour.notes.interestLevel) : "",
-    tour.notes?.leadSource ?? "",
+    tour.notes?.leadSource || tour.inquirySource || "",
     tour.notes?.nextStep ?? "",
     tour.notes?.comment ?? "",
   ]);

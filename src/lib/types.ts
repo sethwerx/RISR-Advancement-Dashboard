@@ -44,6 +44,8 @@ export type CalendarEvent = {
   htmlLink: string;
   registrationId: number | null;
   notesDocUrl: string;
+  /** Walk-in events are not matched to OpenApply registrations. */
+  kind?: "walk-in";
 };
 
 export type TourNotes = {
@@ -91,6 +93,9 @@ export type TourView = {
   displayName: string;
   gradesLabel: string;
   statusLabel: string;
+  source: "OpenApply" | "Walk-in";
+  /** How the family heard about the school, when it came from a booking form rather than tour notes. */
+  inquirySource: string;
   state: RegistrationState;
   host: string;
   campus: string;
@@ -107,6 +112,7 @@ export type TourView = {
     startIso: string;
     endIso: string;
     whenLabel: string;
+    description: string;
     notesDocUrl: string;
     notesDocName: string;
     notesDocBody: string;

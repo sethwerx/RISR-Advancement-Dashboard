@@ -62,3 +62,44 @@ export function buildNoShowPatch(title: string): Record<string, unknown> {
   assertNoConferenceFields(body);
   return body;
 }
+
+/** Later edits send only the description. Conference data is never included. */
+export function buildDescriptionPatch(description: string): Record<string, unknown> {
+  const body = { description };
+  assertNoConferenceFields(body);
+  return body;
+}
+
+export function buildWalkInEventBody(input: {
+  title: string;
+  description: string;
+  startIso: string;
+  endIso: string;
+  guests: string[];
+  walkInId: number;
+  notes?: { fileId: string; fileUrl: string };
+  timeZone?: string;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    summary: input.title,
+    description: input.description,
+    start: { dateTime: input.startIso, timeZone: input.timeZone ?? dashboardConfig.school.timezone },
+    end: { dateTime: input.endIso, timeZone: input.timeZone ?? dashboardConfig.school.timezone },
+    attendees: input.guests.map((email) => ({ email })),
+    extendedProperties: {
+      private: { walkInId: String(input.walkInId) },
+    },
+  };
+  if (input.notes) {
+    body.attachments = [
+      {
+        fileUrl: input.notes.fileUrl,
+        title: "Tour Notes",
+        mimeType: "application/vnd.google-apps.document",
+        fileId: input.notes.fileId,
+      },
+    ];
+  }
+  assertNoConferenceFields(body);
+  return body;
+}

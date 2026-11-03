@@ -5,8 +5,9 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["var(--font-display)", "Georgia", "serif"],
+        sans: ["Calibri", "var(--font-carlito)", "sans-serif"],
+        title: ["var(--font-title)", "sans-serif"],
+        heading: ["var(--font-heading)", "sans-serif"],
       },
       colors: {
         navy: {

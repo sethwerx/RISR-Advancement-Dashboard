@@ -16,6 +16,17 @@ export function todayIct(now = new Date()): string {
   return ictParts(now.toISOString()).date;
 }
 
+/** Next 15-minute mark in Asia/Bangkok, used as the start of a walk-in tour. */
+export function nextQuarterHourIct(now = new Date()): { date: string; time: string } {
+  const parts = ictParts(now.toISOString());
+  let { hours } = parts;
+  const rounded = Math.ceil(parts.minutes / 15) * 15;
+  const minutes = rounded === 60 ? 0 : rounded;
+  if (rounded === 60) hours += 1;
+  const date = hours >= 24 ? addCalendarDays(parts.date, Math.floor(hours / 24)) : parts.date;
+  return { date, time: formatClock(hours % 24, minutes) };
+}
+
 export function defaultMeetingWindow(now = new Date()): { from: string; to: string } {
   const today = todayIct(now);
   return {

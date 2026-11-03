@@ -31,6 +31,11 @@ export function buildTourTitle(students: TitleStudent[], noShow = false): string
   return `${head} - ${names}`;
 }
 
+/** `Walk-in - First (Preferred) Last (Grade)`. */
+export function buildWalkInTitle(student: TitleStudent): string {
+  return `Walk-in - ${formatStudentWithGrade(student)}`;
+}
+
 export function notesDocumentName(students: TitleStudent[]): string {
   return `Notes - Tour - ${students.map(formatStudentWithGrade).join(" & ")}`;
 }
