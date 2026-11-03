@@ -95,7 +95,7 @@ export function AnalyticsPanel({
           onPointerDown={onDragStart}
         >
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">Tours / Visits</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">Tours/Visits</p>
             <h2 className="font-title text-4xl leading-none">Analytics</h2>
           </div>
           <div className="export-hide flex flex-wrap justify-end gap-1">

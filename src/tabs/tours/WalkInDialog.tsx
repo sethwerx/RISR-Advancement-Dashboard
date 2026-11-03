@@ -36,7 +36,7 @@ export function WalkInDialog({
           onSubmit(values);
         }}
       >
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5c7388]">Tours / Visits</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5c7388]">Tours/Visits</p>
         <h2 className="font-title text-4xl leading-none text-navy-900">New walk-in tour</h2>
         <p className="mt-2 text-sm text-[#3e556c]">
           The fields follow the OpenApply tour form. Labels and choices are inferred, so they can be edited in the form

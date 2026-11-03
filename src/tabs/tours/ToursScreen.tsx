@@ -166,7 +166,7 @@ export function ToursScreen() {
       <div className="min-w-0 flex-1">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3 print:block">
           <div>
-            <h1 className="font-title text-5xl leading-none text-navy-900">School Tours / Visits</h1>
+            <h1 className="font-title text-5xl leading-none text-navy-900">School Tours/Visits</h1>
             <p className="mt-1 max-w-2xl text-sm text-[#3e556c]">
               OpenApply registrations merged with the School Tour/Visit calendar. Times are Asia/Bangkok. Did Not
               Attend is marked in OpenApply by hand — this dashboard never writes to OpenApply.
