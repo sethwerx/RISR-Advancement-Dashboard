@@ -164,4 +164,6 @@ Tabs are plug-ins. Adding one is a folder plus one registry line.
 
 `src/app/[[...slug]]/page.tsx` renders `Component` for any enabled entry. You do not add a new page file. Placeholder entries stay in the registry with `enabled: false` so the tab is visible but inert. Applications, Retention, and Analytics are reserved that way. Tour charts already open from Tours/Visits; the Analytics tab is the future full-page home.
 
+Applicants, Student List, and Scholarships are enabled scaffolds. Each one has a Coming soon card and a fictional sample table. They do not call OpenApply, Google, or Notion yet. Applicants uses the School Admission Pipeline stages. Student List counts a student as active only when they have a No., and LOA students stay on the list. Scholarships shows applicant, grade, scholarship type, amount or percent, and status.
+
 If the tab stores rows, add a sheet descriptor in `src/lib/sheet/schema.ts`. The sheet sync creates any missing tab. Keep OpenApply access in `src/lib/server/openapply.ts`, which is read-only apart from the token request.
