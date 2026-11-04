@@ -135,6 +135,10 @@ Covered:
 - Matching: new, synced, rescheduled, canceled (with and without a calendar event), name-and-date fallback
 - Time: `10:00 AM` in ICT plus 120 minutes, midnight, noon, and a tour that crosses midnight
 
+## Local file
+
+`dist/advancement-office.html` opens by double-click. Sample data and **Load data file** work offline. Google sign-in reads the master sheet from a browser and is described in `STANDALONE.md`. The sheet layout is `MASTER_SHEET.md`.
+
 ## Deployment
 
 Vercel is the host to use. The weekday 05:55 Asia/Bangkok sync cannot live inside a short-lived server, so `vercel.json` schedules it at 22:55 UTC, Sunday through Thursday. Step-by-step setup, including the `@risr.ac.th` sign-in gate, is in `DEPLOY.md`.
