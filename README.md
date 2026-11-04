@@ -137,13 +137,9 @@ Covered:
 
 ## Deployment
 
-One long-lived Node process is the right shape. The OpenApply token cache is in memory, and the Google refresh token and sheet id live on disk unless you set the env vars.
+Vercel is the host to use. The weekday 05:55 Asia/Bangkok sync cannot live inside a short-lived server, so `vercel.json` schedules it at 22:55 UTC, Sunday through Thursday. Step-by-step setup, including the `@risr.ac.th` sign-in gate, is in `DEPLOY.md`.
 
-- **School VM:** `npm ci && npm run build && npm start`, with `.env.local` or real environment variables and a persistent `data/` directory.
-- **Docker:** `docker build -t risr-advancement .` then run it with the env vars and a volume mounted at `/app/data`. The image listens on port 3000.
-- **A host with an ephemeral disk** (for example Vercel): set `GOOGLE_REFRESH_TOKEN`, `GOOGLE_MASTER_SHEET_ID`, and `SESSION_SECRET`. Do not rely on `data/` surviving a restart. Run a single instance so token refresh is not raced.
-
-Set `GOOGLE_REDIRECT_URI` to the public callback URL and add that URL on the OAuth client.
+A school VM or Docker image also works if it stays running and keeps a `data/` directory. On those hosts the in-process clock runs the 05:55 job. Set `AUTH_REQUIRED=true` when the machine is reachable beyond the office.
 
 ## Add a tab
 

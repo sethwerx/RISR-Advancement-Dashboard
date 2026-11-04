@@ -7,7 +7,7 @@ import { refreshOffice } from "@/lib/server/office-sync";
 let started = false;
 
 export function startOfficeScheduler() {
-  if (started) return;
+  if (started || process.env.VERCEL === "1") return;
   started = true;
   setInterval(() => {
     if (!shouldRunScheduledSync(new Date(), readSyncStamp())) return;

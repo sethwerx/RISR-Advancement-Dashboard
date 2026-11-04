@@ -4,6 +4,7 @@ import { sourceSheets } from "@/config/sources";
 import { buildSnapshot, snapshotGrids } from "@/lib/office/build";
 import { joinPeople } from "@/lib/office/join";
 import { bangkokParts } from "@/lib/office/schedule";
+import { decodeSnapshot, encodeSnapshot } from "@/lib/office/snapshot-json";
 import { fictionalSnapshot } from "@/lib/office/sample";
 import type { OfficeSnapshot, SyncLogEntry } from "@/lib/office/types";
 import { loadLiveParts, officeCredentialsReady } from "@/lib/server/adapters/fetch-office";
@@ -32,7 +33,7 @@ export async function writeMasterSnapshot(snapshot: OfficeSnapshot): Promise<str
   if (sourceIds.has(id)) throw new Error("Refusing to write a source spreadsheet.");
   const meta = await sheetsJson(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(id)}?fields=sheets.properties`);
   const existing = ((meta.sheets as Array<{ properties?: { title?: string } }> | undefined) ?? []).map((sheet) => String(sheet.properties?.title ?? ""));
-  const grids = snapshotGrids(snapshot);
+  const grids = [...snapshotGrids(snapshot), { title: "Snapshot", values: encodeSnapshot(snapshot) }];
   const missing = grids.filter((grid) => !existing.includes(grid.title));
   if (missing.length > 0) {
     await sheetsJson(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(id)}:batchUpdate`, {
@@ -95,6 +96,30 @@ export async function refreshOffice(trigger: "manual" | "schedule"): Promise<Off
   return snapshot;
 }
 
-export function currentSnapshot(): OfficeSnapshot {
-  return readOfficeSnapshot() ?? fictionalSnapshot();
+async function readMasterSnapshot(): Promise<OfficeSnapshot | null> {
+  const id = masterSheetId();
+  if (!id || sourceIds.has(id)) return null;
+  const range = "'Snapshot'!A:A";
+  const data = await sheetsJson(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(id)}/values/${encodeURIComponent(range)}`,
+  );
+  const values = (data.values as string[][] | undefined) ?? [];
+  return decodeSnapshot(values);
+}
+
+export async function currentSnapshot(): Promise<OfficeSnapshot> {
+  const local = readOfficeSnapshot();
+  if (local) return local;
+  if (officeCredentialsReady()) {
+    try {
+      const remote = await readMasterSnapshot();
+      if (remote) {
+        writeOfficeSnapshot(remote);
+        return remote;
+      }
+    } catch {
+      /* A missing Snapshot tab means Refresh now has not run yet. */
+    }
+  }
+  return fictionalSnapshot();
 }

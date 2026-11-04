@@ -4,6 +4,8 @@ import { createHmac, createSign, randomBytes, timingSafeEqual } from "node:crypt
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { cookies } from "next/headers";
+import { isSchoolEmail } from "@/lib/access";
+import { readSessionEmail, signSession } from "@/lib/session-cookie";
 import { getServerConfig } from "@/lib/server/env";
 import { HttpError } from "@/lib/server/http";
 import { redact } from "@/lib/redact";
@@ -203,12 +205,16 @@ export async function googleJson(url: string, init: RequestInit = {}, retry = tr
   return text ? (JSON.parse(text) as Record<string, unknown>) : {};
 }
 
-export async function readSession(): Promise<boolean> {
+export async function readViewerEmail(): Promise<string | null> {
   const secret = getServerConfig().sessionSecret;
-  if (!secret) return false;
+  if (!secret) return null;
   const jar = await cookies();
   const raw = jar.get("risr_session")?.value ?? "";
-  return verifyValue(raw, secret) === "1";
+  return readSessionEmail(raw, secret);
+}
+
+export async function readSession(): Promise<boolean> {
+  return (await readViewerEmail()) !== null;
 }
 
 export async function assertCanWrite(): Promise<void> {
@@ -240,11 +246,12 @@ export function readOAuthState(signed: string): string | null {
   return verifyValue(signed, secret);
 }
 
-export async function setSessionCookie() {
+export async function setSessionCookie(email: string) {
   const secret = getServerConfig().sessionSecret;
   if (!secret) throw new HttpError(500, "Set SESSION_SECRET before signing in.");
+  if (!isSchoolEmail(email)) throw new HttpError(403, "domain");
   const jar = await cookies();
-  jar.set("risr_session", signValue("1", secret), {
+  jar.set("risr_session", await signSession(email, secret), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -258,7 +265,38 @@ export async function clearSessionCookie() {
   jar.set("risr_session", "", { httpOnly: true, path: "/", maxAge: 0 });
 }
 
-export async function exchangeAuthCode(code: string): Promise<string> {
+/** Viewer sign-in. Does not store a refresh token. */
+export async function exchangeViewerCode(code: string): Promise<string> {
+  const parsed = await requestAuthCode(code);
+  if (!parsed.access_token) throw new HttpError(400, "Google did not return an access token.");
+  const email = await fetchEmail(parsed.access_token);
+  if (!isSchoolEmail(email)) throw new HttpError(403, "domain");
+  return email;
+}
+
+/** One-time admissions@ connection. Returns a refresh token to paste into the host environment. */
+export async function exchangeAdmissionsCode(code: string): Promise<{ email: string; refreshToken: string }> {
+  const cfg = getServerConfig();
+  const parsed = await requestAuthCode(code);
+  if (!parsed.access_token) throw new HttpError(400, "Google did not return an access token.");
+  const email = await fetchEmail(parsed.access_token);
+  if (email !== cfg.google.organizerEmail) {
+    throw new HttpError(403, "organizer");
+  }
+  const existing = readOAuthFile();
+  const refresh = parsed.refresh_token || existing.refreshToken || currentRefreshToken();
+  if (!refresh) {
+    throw new HttpError(400, "Google did not return a refresh token. Remove the app's access and sign in again.");
+  }
+  if (parsed.refresh_token) {
+    memoryRefresh = parsed.refresh_token;
+    writeOAuthFile({ refreshToken: parsed.refresh_token, email });
+  }
+  clearGoogleAccessCache();
+  return { email, refreshToken: refresh };
+}
+
+async function requestAuthCode(code: string): Promise<{ access_token?: string; refresh_token?: string }> {
   const cfg = getServerConfig();
   const body = new URLSearchParams({
     code,
@@ -278,21 +316,7 @@ export async function exchangeAuthCode(code: string): Promise<string> {
     cache: "no-store",
   });
   const text = await response.text();
-  if (!response.ok) {
-    throw new HttpError(400, `Google did not accept the sign-in (${response.status}).`);
-  }
-  const parsed = JSON.parse(text) as { refresh_token?: string };
-  const existing = readOAuthFile();
-  const refresh = parsed.refresh_token || existing.refreshToken || "";
-  if (!refresh && !currentRefreshToken()) {
-    throw new HttpError(400, "Google did not return a refresh token. Remove the app's access and sign in again.");
-  }
-  if (parsed.refresh_token) {
-    memoryRefresh = parsed.refresh_token;
-    writeOAuthFile({ ...existing, refreshToken: parsed.refresh_token });
-  }
-  clearGoogleAccessCache();
-  const email = await getGoogleEmail();
-  writeOAuthFile({ ...readOAuthFile(), email });
-  return email;
+  if (!response.ok) throw new HttpError(400, `Google did not accept the sign-in (${response.status}).`);
+  return JSON.parse(text) as { access_token?: string; refresh_token?: string };
 }
+

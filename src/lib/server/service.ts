@@ -7,7 +7,7 @@ import { formatNotesBlock, initialNotesDocBody, notesSectionHtml, upsertNotesSec
 import { insertCalendarEvent, listCalendarEvents, patchCalendarDescription, patchCalendarTitle } from "@/lib/server/calendar";
 import { appendToDoc, copyNotesDoc, docIdFromUrl, trashFile } from "@/lib/server/docs";
 import { getServerConfig, isMockMode } from "@/lib/server/env";
-import { assertCanWrite, getGoogleEmail, readSession } from "@/lib/server/google-auth";
+import { assertCanWrite, getGoogleEmail, readViewerEmail } from "@/lib/server/google-auth";
 import { HttpError } from "@/lib/server/http";
 import { readStore, updateStore } from "@/lib/server/mock-store";
 import { validateNotes } from "@/lib/server/notes";
@@ -108,24 +108,19 @@ async function account(): Promise<AccountState> {
       message: "",
     };
   }
-  let email = "";
+  const viewer = await readViewerEmail().catch(() => null);
+  let apiEmail = "";
   let message = "";
   try {
-    email = await getGoogleEmail();
+    apiEmail = await getGoogleEmail();
   } catch (error) {
-    message = error instanceof HttpError ? error.message : "Google is not connected.";
+    message = error instanceof HttpError ? error.message : "Google data access is not connected yet.";
   }
-  let signedIn = false;
-  try {
-    signedIn = await readSession();
-  } catch {
-    signedIn = false;
-  }
-  const canWrite = signedIn && email === cfg.google.organizerEmail;
-  if (!message && !signedIn) message = `Sign in as ${cfg.google.organizerEmail} to update the calendar.`;
-  if (!message && email && email !== cfg.google.organizerEmail) {
-    message = `Signed in as ${email}. Calendar changes are limited to ${cfg.google.organizerEmail}.`;
-  }
+  const signedIn = Boolean(viewer);
+  const email = viewer || "";
+  const canWrite = signedIn && apiEmail === cfg.google.organizerEmail;
+  if (signedIn) message = canWrite ? "" : `Signed in as ${email}. Calendar updates run as ${cfg.google.organizerEmail}.`;
+  else if (!message) message = "Sign in with your risr.ac.th Google account.";
   return { mock: false, signedIn, email, organizerEmail: cfg.google.organizerEmail, canWrite, message };
 }
 
