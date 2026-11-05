@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fictionalSnapshot } from "@/lib/office/sample";
 import { masterSheetColumns } from "@/lib/office/sheet-schema";
-import { calendarWriteQuery, noShowPatch, payloadFromTable, snapshotFromSheets, toursFromSheet, walkInEventBody } from "@/lib/standalone/data";
+import { calendarWriteQuery, noShowPatch, payloadFromTable, snapshotFromSheets, tourRowsFromSheets, toursFromSheet, walkInEventBody } from "@/lib/standalone/data";
 
 describe("master sheet contract", () => {
   it("matches the columns the dashboard writes", () => {
@@ -32,6 +32,15 @@ describe("master sheet contract", () => {
       ["42", "Ada Example", "2026-11-01", "10:00 AM", "G3", "Riley Quinn", "", "evt-1"],
     ]);
     expect(tours[0]).toMatchObject({ id: "42", students: "Ada Example", calendarEventId: "evt-1" });
+    const preferred = tourRowsFromSheets({
+      Tours: [["Students"], ["Old tab"]],
+      "Tours/Visits": [
+        ["Registration ID", "Students"],
+        ["7", "Preferred tab"],
+      ],
+    });
+    expect(preferred[0].students).toBe("Preferred tab");
+    expect(tourRowsFromSheets({ Tours: [["Students"], ["Only tours"]] })[0].students).toBe("Only tours");
     const rich = fictionalSnapshot("2026-11-03T00:00:00.000Z");
     const loaded = snapshotFromSheets({
       Snapshot: [["snapshot-v1"], [JSON.stringify(rich)]],

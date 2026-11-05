@@ -4,9 +4,11 @@ The local dashboard reads one Google spreadsheet. Row 1 of each tab is the heade
 
 The student ID column is Weena's ID No. Leave it blank when the person is not on that list. Do not copy OpenApply's Student ID field into it.
 
-Sheet titles must match exactly, including `Canceled/Declined` and `Student List`.
+Sheet titles must match exactly, including `Canceled/Declined` and `Student List`. The tours tab may be named `Tours` or `Tours/Visits`. When both exist, the local file uses `Tours/Visits`.
 
 ## Tours
+
+The tab title is `Tours`. `Tours/Visits` is accepted as the same tab. Columns are the same either way.
 
 `Registration ID`, `OA Event ID`, `Tour type`, `Source`, `Date`, `Time`, `End`, `Students`, `Grades`, `OA Student IDs`, `OA Status`, `Registration state`, `Host`, `Campus`, `Attendees`, `Parent`, `OA note`, `Calendar event ID`, `Calendar link`, `Sync status`, `Attendance`, `Notes doc`, `Grade of interest`, `Lead source`, `Interest level`, `Concerns`, `Next step`, `Tour guide`, `Comment`, `Notes updated`, `Profile URLs`
 

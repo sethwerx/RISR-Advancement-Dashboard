@@ -35,6 +35,7 @@ export type MasterSheetTitle = keyof typeof masterSheetColumns;
 /** Tabs the local HTML file reads. Snapshot is optional and holds the full JSON payload. */
 export const standaloneSheetTitles = [
   "Tours",
+  "Tours/Visits",
   "Applicants",
   "Assessments",
   "Admitted",

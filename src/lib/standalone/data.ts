@@ -85,6 +85,13 @@ export function sampleTours(): LocalTour[] {
   ];
 }
 
+/** Prefer Seth's tab name `Tours/Visits`, then `Tours`. */
+export function tourRowsFromSheets(sheets: Record<string, string[][]>): LocalTour[] {
+  const preferred = sheets["Tours/Visits"];
+  const values = preferred && preferred.length > 1 ? preferred : sheets.Tours ?? preferred ?? [];
+  return toursFromSheet(values);
+}
+
 export function toursFromSheet(values: string[][]): LocalTour[] {
   if (values.length < 2) return [];
   const header = values[0].map((cell) => cell.trim());

@@ -10,7 +10,7 @@ import {
   notesPatch,
   sampleTours,
   snapshotFromSheets,
-  toursFromSheet,
+  tourRowsFromSheets,
   walkInEventBody,
   type LocalTour,
 } from "@/lib/standalone/data";
@@ -95,7 +95,7 @@ export function App() {
           const sheets = parsed.sheets as Record<string, string[][]>;
           const next = snapshotFromSheets(sheets);
           if (next) setSnapshot(next);
-          const tourRows = toursFromSheet(sheets.Tours ?? []);
+          const tourRows = tourRowsFromSheets(sheets);
           if (tourRows.length) setTours(tourRows);
         } else {
           throw new Error("Unrecognized data file.");

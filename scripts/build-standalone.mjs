@@ -45,6 +45,8 @@ const js = readFileSync(bundlePath, "utf8");
 const white = dataUri("public/brand/logo-white.png", "image/png");
 const navy = dataUri("public/brand/logo-navy.png", "image/png");
 
+const liveConfig = JSON.parse(readFileSync(path.join(root, "standalone/live-config.json"), "utf8"));
+
 const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -56,13 +58,7 @@ const html = `<!doctype html>
 <body>
 <!-- Edit this block. The client ID is public. Do not put secrets here. -->
 <script id="advancement-config">
-window.ADVANCEMENT_OFFICE_CONFIG = {
-  googleClientId: "",
-  masterSheetId: "",
-  calendarId: "c_ga82ohfe30hhckqp10n1ipvktc@group.calendar.google.com",
-  allowedDomain: "risr.ac.th",
-  organizerEmail: "admissions@risr.ac.th"
-};
+window.ADVANCEMENT_OFFICE_CONFIG = ${JSON.stringify(liveConfig, null, 2)};
 window.__BRAND = { white: ${JSON.stringify(white)}, navy: ${JSON.stringify(navy)} };
 </script>
 <div id="root"></div>

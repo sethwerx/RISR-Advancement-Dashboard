@@ -1,24 +1,23 @@
 # Local Advancement Office file
 
-`dist/advancement-office.html` is the dashboard as one file. Double-click it. Chrome or Safari opens it with the sample data, the tabs, charts, PNG/PDF export, the notes panel, and the walk-in form. Fonts and logos are inside the file. There is no server and no secret in the file.
+`dist/advancement-office.html` is the dashboard as one file. On a Mac, double-click **Open Advancement Office.command**. That serves `dist/` on port 4173 and opens `http://localhost:4173/advancement-office.html`. Leave the Terminal window open while you use the app.
 
-Rebuild it with:
+The public OAuth client ID and the master spreadsheet ID are already in the config block at the top of the HTML file. The client is the Internal Web client for project `advancement-office`. Its JavaScript origins are `http://localhost:4173` and `http://127.0.0.1:4173`.
+
+Double-clicking the HTML file itself still opens sample data. **Load data file** and **Save data file** work from that page. Google sign-in does not run on a `file://` page, which is why the launcher uses localhost.
+
+Rebuild the file with:
 
 ```bash
 npm run standalone
 ```
 
-## What Seth sets up
+## Sign in
 
-1. In Google Cloud, create an OAuth client of type **Web application**. This client ID is public.
-2. If the Cloud project is in the `risr.ac.th` Workspace, set the consent screen to **Internal**.
-3. Add the scopes `openid`, `email`, `https://www.googleapis.com/auth/spreadsheets`, and `https://www.googleapis.com/auth/calendar`.
-4. Google sign-in does not accept a `file://` page. Add this authorized JavaScript origin: `http://localhost:4173`.
-5. Open the HTML file in a text editor. At the top, in `ADVANCEMENT_OFFICE_CONFIG`, paste the client ID into `googleClientId` and the master spreadsheet ID into `masterSheetId`.
-6. From the folder that contains the HTML file, run `python3 -m http.server 4173` and open `http://localhost:4173/advancement-office.html`.
-7. Click **Sign in with Google** and use a `@risr.ac.th` account that can edit the admissions calendar and read the master sheet.
+1. Double-click `Open Advancement Office.command`.
+2. Click **Sign in with Google** and use a `@risr.ac.th` account that can read the master sheet and edit the School Tour/Visit calendar.
 
-Double-click still works for sample data and for **Load data file**. Use that when you are offline. **Save data file** writes the JSON the Load button reads.
+The OAuth client, scopes, and origins are already created. No further Google Cloud setup is required for this client.
 
 The signed-in account writes No Show tags, walk-in events, and notes to the calendar in `calendarId` (the School Tour/Visit calendar). Every write uses `sendUpdates=none` and does not add Google Meet.
 

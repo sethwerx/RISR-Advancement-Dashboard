@@ -1,7 +1,8 @@
 import { standaloneSheetTitles } from "@/lib/office/sheet-schema";
 import { isSchoolEmail } from "@/lib/access";
-import { snapshotFromSheets, toursFromSheet, type LocalTour } from "@/lib/standalone/data";
+import { snapshotFromSheets, tourRowsFromSheets, type LocalTour } from "@/lib/standalone/data";
 import type { OfficeSnapshot } from "@/lib/office/types";
+import liveConfig from "./live-config.json";
 
 export type OfficeConfig = {
   googleClientId: string;
@@ -36,11 +37,11 @@ declare global {
 export function readConfig(): OfficeConfig {
   const raw = window.ADVANCEMENT_OFFICE_CONFIG ?? {};
   return {
-    googleClientId: raw.googleClientId?.trim() ?? "",
-    masterSheetId: raw.masterSheetId?.trim() ?? "",
-    calendarId: raw.calendarId?.trim() || "c_ga82ohfe30hhckqp10n1ipvktc@group.calendar.google.com",
-    allowedDomain: (raw.allowedDomain || "risr.ac.th").replace(/^@/, ""),
-    organizerEmail: raw.organizerEmail?.trim() || "admissions@risr.ac.th",
+    googleClientId: raw.googleClientId?.trim() || liveConfig.googleClientId,
+    masterSheetId: raw.masterSheetId?.trim() || liveConfig.masterSheetId,
+    calendarId: raw.calendarId?.trim() || liveConfig.calendarId,
+    allowedDomain: (raw.allowedDomain || liveConfig.allowedDomain).replace(/^@/, ""),
+    organizerEmail: raw.organizerEmail?.trim() || liveConfig.organizerEmail,
   };
 }
 
@@ -110,7 +111,7 @@ export async function loadMasterSheet(token: string, spreadsheetId: string): Pro
   for (const title of standaloneSheetTitles) {
     sheets[title] = await sheetValues(token, spreadsheetId, title);
   }
-  return { snapshot: snapshotFromSheets(sheets), tours: toursFromSheet(sheets.Tours ?? []) };
+  return { snapshot: snapshotFromSheets(sheets), tours: tourRowsFromSheets(sheets) };
 }
 
 export async function calendarWrite(token: string, calendarId: string, path: string, method: "POST" | "PATCH", body: Record<string, unknown>) {
