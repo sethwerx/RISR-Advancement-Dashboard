@@ -17,7 +17,8 @@ npm run standalone
 1. Double-click `Open Advancement Office.command`.
 2. Click **Sign in with Google** and use a `@risr.ac.th` account that can read the master sheet and edit the School Tour/Visit calendar.
 3. Open **Settings** and paste the webhook URL from the Grok Bot routine “OA tours sync (manual)”. It stays in this browser only.
-4. **Sync Now** asks that routine to run the same OA tours, calendar, and master sheet job as 05:55 Asia/Bangkok. The page then re-reads the master sheet when a new Sync Log row appears. OpenApply is not called from the browser.
+4. In **Settings**, choose a date (optional), a time, and an interval: weekdays at that time, daily, every N hours, or manual only. Times are Asia/Bangkok. Save stores the choice in this browser.
+5. **Sync Now** still runs the job immediately. The POST body is JSON with `mode`, `date`, `time`, `interval`, `everyHours`, and `timezone` so the Grok Bot routine can read the schedule. The page then re-reads the master sheet when a new Sync Log row appears. OpenApply is not called from the browser, and this file does not keep its own clock.
 
 The OAuth client, scopes, and origins are already created. No further Google Cloud setup is required for this client.
 

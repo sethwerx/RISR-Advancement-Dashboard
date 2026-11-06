@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fictionalSnapshot } from "@/lib/office/sample";
 import { masterSheetColumns } from "@/lib/office/sheet-schema";
 import { calendarWriteQuery, noShowPatch, payloadFromTable, snapshotFromSheets, tourRowsFromSheets, toursFromSheet, walkInEventBody } from "@/lib/standalone/data";
-import { latestSyncAt, normalizeWebhookUrl, syncLogAdvanced } from "@/lib/standalone/sync-webhook";
+import { describeSyncSchedule, latestSyncAt, normalizeWebhookUrl, parseSyncSchedule, syncLogAdvanced, syncWebhookBody } from "@/lib/standalone/sync-webhook";
 
 describe("master sheet contract", () => {
   it("matches the columns the dashboard writes", () => {
@@ -59,6 +59,19 @@ describe("sync webhook", () => {
     expect(syncLogAdvanced("2026-11-06T05:55:00.000Z", "2026-11-06T06:10:00.000Z")).toBe(true);
     expect(syncLogAdvanced("2026-11-06T05:55:00.000Z", "2026-11-06T05:55:00.000Z")).toBe(false);
     expect(latestSyncAt([{ at: "2026-11-06T05:55:00.000Z" }, { at: "2026-11-06T06:10:00.000Z" }])).toBe("2026-11-06T06:10:00.000Z");
+    const schedule = parseSyncSchedule(JSON.stringify({ date: "2026-11-10", time: "05:55", interval: "weekdays", everyHours: 4 }));
+    expect(syncWebhookBody(schedule)).toEqual({
+      mode: "schedule",
+      date: "2026-11-10",
+      time: "05:55",
+      interval: "weekdays",
+      everyHours: 0,
+      timezone: "Asia/Bangkok",
+    });
+    expect(syncWebhookBody({ ...schedule, interval: "hourly", everyHours: 3 }).everyHours).toBe(3);
+    expect(syncWebhookBody({ ...schedule, interval: "manual" }).mode).toBe("manual");
+    expect(describeSyncSchedule(schedule)).toBe("Weekdays at 05:55 Asia/Bangkok");
+    expect(parseSyncSchedule("{").interval).toBe("weekdays");
   });
 });
 

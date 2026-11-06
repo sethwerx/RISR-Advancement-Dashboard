@@ -16,7 +16,18 @@ import {
 } from "@/lib/standalone/data";
 import { buildWalkInTitle } from "@/lib/title";
 import { tourInterval } from "@/lib/time";
-import { latestSyncAt, normalizeWebhookUrl, syncLogAdvanced, webhookStorageKey } from "@/lib/standalone/sync-webhook";
+import {
+  defaultSyncSchedule,
+  describeSyncSchedule,
+  latestSyncAt,
+  normalizeWebhookUrl,
+  parseSyncSchedule,
+  scheduleStorageKey,
+  syncLogAdvanced,
+  syncWebhookBody,
+  webhookStorageKey,
+  type SyncSchedule,
+} from "@/lib/standalone/sync-webhook";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
 
 const TABS: { id: string; label: string; enabled: boolean }[] = [
@@ -53,6 +64,7 @@ export function App() {
   const [chart, setChart] = useState<OfficeChart | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [webhookDraft, setWebhookDraft] = useState(() => localStorage.getItem(webhookStorageKey()) ?? "");
+  const [schedule, setSchedule] = useState<SyncSchedule>(() => parseSyncSchedule(localStorage.getItem(scheduleStorageKey())));
   const [syncState, setSyncState] = useState<"idle" | "loading" | "success" | "failure">("idle");
 
   async function signIn() {
@@ -176,10 +188,11 @@ export function App() {
       return;
     }
     localStorage.setItem(webhookStorageKey(), url);
+    localStorage.setItem(scheduleStorageKey(), JSON.stringify(schedule));
     setWebhookDraft(url);
     setSettingsOpen(false);
     setError("");
-    setMessage("Webhook URL saved in this browser. Sync Now will use it.");
+    setMessage(`Saved in this browser. ${describeSyncSchedule(schedule)}. Sync Now sends this to the bot.`);
   }
 
   async function syncNow() {
@@ -195,11 +208,12 @@ export function App() {
     setMessage("Requesting the OA tours, calendar, and master sheet sync. The bot runs it. This page does not call OpenApply.");
     const before = latestSyncAt(snapshot.syncLog);
     try {
+      const savedSchedule = parseSyncSchedule(localStorage.getItem(scheduleStorageKey()));
       const response = await fetch(url, {
         method: "POST",
         mode: "cors",
         headers: { "Content-Type": "application/json" },
-        body: "{}",
+        body: JSON.stringify(syncWebhookBody(savedSchedule)),
       });
       if (!response.ok) throw new Error(`The webhook returned ${response.status}.`);
       setSyncState("success");
@@ -275,7 +289,7 @@ export function App() {
       <main className="page">
         {message ? <p className="notice">{message}</p> : null}
         {error ? <p className="warn">{error}</p> : null}
-        {email ? <p className="lede">Sync Now asks the bot to run the OA tours, calendar, and master sheet sync. It is the same job as 05:55 Asia/Bangkok.</p> : null}
+        {email ? <p className="lede">Sync Now asks the bot to run the OA tours, calendar, and master sheet sync now. Saved schedule: {describeSyncSchedule(schedule)}. Asia/Bangkok. The morning job still belongs to the Grok Bot routine.</p> : null}
         {source === "sample" ? <p className="lede">Sample data is loaded. Sign in to read the master sheet, or use Load data file.</p> : null}
         {tab === "tours" ? (
           <ToursPanel
@@ -319,11 +333,35 @@ export function App() {
               <button className="btn" type="button" onClick={() => setSettingsOpen(false)}>Close</button>
             </header>
             <div className="body">
-              <p className="lede">Paste the URL from the Grok Bot routine “OA tours sync (manual)”. It is stored only in this browser.</p>
+              <p className="lede">Paste the URL from the Grok Bot routine “OA tours sync (manual)”. The date, time, and interval are saved in this browser and sent with Sync Now. The bot still runs the OpenApply job. This page does not.</p>
               <label>
                 Webhook URL
                 <input value={webhookDraft} onChange={(event) => setWebhookDraft(event.target.value)} placeholder="https://" autoComplete="off" />
               </label>
+              <label>
+                Date (optional one-off)
+                <input type="date" value={schedule.date} onChange={(event) => setSchedule({ ...schedule, date: event.target.value })} />
+              </label>
+              <label>
+                Time (Asia/Bangkok)
+                <input type="time" value={schedule.time} onChange={(event) => setSchedule({ ...schedule, time: event.target.value || defaultSyncSchedule().time })} />
+              </label>
+              <label>
+                Interval
+                <select value={schedule.interval} onChange={(event) => setSchedule({ ...schedule, interval: event.target.value as SyncSchedule["interval"] })}>
+                  <option value="weekdays">Weekdays at this time</option>
+                  <option value="daily">Daily</option>
+                  <option value="hourly">Every N hours</option>
+                  <option value="manual">Manual only</option>
+                </select>
+              </label>
+              {schedule.interval === "hourly" ? (
+                <label>
+                  Every N hours
+                  <input type="number" min={1} max={24} value={schedule.everyHours} onChange={(event) => setSchedule({ ...schedule, everyHours: Number(event.target.value) })} />
+                </label>
+              ) : null}
+              <p className="lede">{describeSyncSchedule(schedule)}. Changing this here does not edit the Grok Bot clock until Sync Now sends it.</p>
               <button className="btn primary" type="submit">Save</button>
             </div>
           </form>
