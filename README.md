@@ -137,7 +137,7 @@ Covered:
 
 ## Local file
 
-`dist/advancement-office.html` is the local dashboard. On a Mac, **Open Advancement Office.command** serves it on port 4173. The HTML can sit in `dist/` or in the same folder as the `.command` file. Sample data and **Load data file** work offline. Google sign-in reads the master sheet from a browser and is described in `STANDALONE.md`. After sign-in, **Sync Now** posts to a webhook URL saved in **Settings** (this browser only). Settings also stores a date, time, and interval in Asia/Bangkok and sends that JSON with Sync Now. The morning job still belongs to the Grok Bot routine. The sheet layout is `MASTER_SHEET.md`.
+`dist/advancement-office.html` is the local dashboard. On a Mac, **Open Advancement Office.command** serves it on port 4173. The HTML can sit in `dist/` or in the same folder as the `.command` file. Sample data and **Load data file** work offline. Google sign-in reads the master sheet from a browser and is described in `STANDALONE.md`. After sign-in, **Sync Now** in the header and on every tab posts to a webhook URL saved in **Settings** (this browser only). Settings also stores a date, time, and interval in Asia/Bangkok and sends that JSON with Sync Now. The morning job still belongs to the Grok Bot routine, which refreshes Student List from Weena’s SY2026-2027 sheet plus OpenApply. The page then reads the master sheet. Student List has an All button and a button for each grade. The sheet layout is `MASTER_SHEET.md`.
 
 ## Deployment
 

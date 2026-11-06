@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { canonicalGrade, filterStudentsByGrade, studentGradeLevels, type StudentGradeLevel } from "@/lib/standalone/grades";
+import { dashboardTabs, syncControlLabel } from "@/lib/standalone/tabs";
 import { walkInFormFields } from "@/tabs/tours/walkinForm.config";
 import { fictionalSnapshot } from "@/lib/office/sample";
 import { rowInYear, yearOptions } from "@/lib/office/year";
@@ -29,21 +31,6 @@ import {
   type SyncSchedule,
 } from "@/lib/standalone/sync-webhook";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
-
-const TABS: { id: string; label: string; enabled: boolean }[] = [
-  { id: "tours", label: "Tours/Visits", enabled: true },
-  { id: "applicants", label: "Applicants", enabled: true },
-  { id: "assessments", label: "Assessments", enabled: true },
-  { id: "admitted", label: "Admitted", enabled: true },
-  { id: "canceled-declined", label: "Canceled/Declined", enabled: true },
-  { id: "offers", label: "Offers", enabled: true },
-  { id: "student-list", label: "Student List", enabled: true },
-  { id: "withdrawals", label: "Withdrawals", enabled: true },
-  { id: "alumni", label: "Alumni", enabled: true },
-  { id: "scholarships", label: "Scholarships", enabled: true },
-  { id: "retention", label: "Retention", enabled: false },
-  { id: "analytics", label: "Analytics", enabled: false },
-];
 
 type Source = "sample" | "file" | "sheet";
 
@@ -280,7 +267,7 @@ export function App() {
         </div>
       </header>
       <nav className="tabs" aria-label="Dashboard sections">
-        {TABS.map((item) => (
+        {dashboardTabs.map((item) => (
           <button key={item.id} type="button" className={tab === item.id ? "active" : ""} disabled={!item.enabled} onClick={() => setTab(item.id)}>
             {item.label}{item.enabled ? "" : " Soon"}
           </button>
@@ -295,20 +282,30 @@ export function App() {
           <ToursPanel
             tours={tours}
             logo={brand.navy}
+            syncing={syncState === "loading"}
+            onSync={() => void syncNow()}
             onNoShow={(tour) => void markNoShow(tour).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Calendar update failed."))}
             onOpen={setSelectedTour}
             onWalkIn={() => setWalkIn(true)}
             onChart={() => setChart({ id: "attendance", title: "Tour attendance", points: attendancePoints(tours) })}
           />
-        ) : TABS.find((item) => item.id === tab)?.enabled ? (
+        ) : dashboardTabs.find((item) => item.id === tab)?.enabled ? (
           <OfficePanel
             tab={tab as OfficeTabId}
             snapshot={snapshot}
+            syncing={syncState === "loading"}
+            onSync={() => void syncNow()}
             onOpen={setSelectedRow}
             onChart={setChart}
           />
         ) : (
-          <section className="card"><h3 className="font-heading">Coming soon</h3><p>This section is not built yet.</p></section>
+          <section className="card">
+            <div className="page-head">
+              <h3 className="font-heading">Coming soon</h3>
+              <SyncTabButton busy={syncState === "loading"} onSync={() => void syncNow()} />
+            </div>
+            <p>This section is not built yet.</p>
+          </section>
         )}
       </main>
       {selectedTour ? <NotesSlide title={selectedTour.students} detail={[["Date", selectedTour.date], ["Time", selectedTour.time], ["Host", selectedTour.host], ["Attendance", selectedTour.attendance]]} storageKey={`risr.tourNotes.${selectedTour.id}`} onClose={() => setSelectedTour(null)} onSave={async (text) => {
@@ -380,7 +377,15 @@ function attendancePoints(tours: LocalTour[]) {
   return [...counts.entries()].map(([label, value]) => ({ label, value }));
 }
 
-function ToursPanel({ tours, logo, onNoShow, onOpen, onWalkIn, onChart }: { tours: LocalTour[]; logo: string; onNoShow: (tour: LocalTour) => void; onOpen: (tour: LocalTour) => void; onWalkIn: () => void; onChart: () => void }) {
+function SyncTabButton({ busy, onSync }: { busy: boolean; onSync: () => void }) {
+  return (
+    <button className="btn primary" type="button" data-sync="tab" disabled={busy} title="Runs the OA tours, calendar, and master sheet sync through the bot." onClick={onSync}>
+      {busy ? "Requesting…" : syncControlLabel}
+    </button>
+  );
+}
+
+function ToursPanel({ tours, logo, syncing, onSync, onNoShow, onOpen, onWalkIn, onChart }: { tours: LocalTour[]; logo: string; syncing: boolean; onSync: () => void; onNoShow: (tour: LocalTour) => void; onOpen: (tour: LocalTour) => void; onWalkIn: () => void; onChart: () => void }) {
   const [query, setQuery] = useState("");
   const visible = tours.filter((tour) => `${tour.students} ${tour.host} ${tour.date}`.toLowerCase().includes(query.trim().toLowerCase()));
   return (
@@ -391,6 +396,7 @@ function ToursPanel({ tours, logo, onNoShow, onOpen, onWalkIn, onChart }: { tour
           <p className="lede">Times are Asia/Bangkok. No-show and walk-in writes use the signed-in account on the admissions calendar, with sendUpdates=none.</p>
         </div>
         <div className="header-actions">
+          <SyncTabButton busy={syncing} onSync={onSync} />
           <button className="btn" type="button" onClick={onChart}>Attendance chart</button>
           <button className="btn primary" type="button" onClick={onWalkIn}>New Walk-in Tour</button>
         </div>
@@ -416,27 +422,41 @@ function ToursPanel({ tours, logo, onNoShow, onOpen, onWalkIn, onChart }: { tour
   );
 }
 
-function OfficePanel({ tab, snapshot, onOpen, onChart }: { tab: OfficeTabId; snapshot: OfficeSnapshot; onOpen: (row: OfficeRow) => void; onChart: (chart: OfficeChart) => void }) {
+function OfficePanel({ tab, snapshot, syncing, onSync, onOpen, onChart }: { tab: OfficeTabId; snapshot: OfficeSnapshot; syncing: boolean; onSync: () => void; onOpen: (row: OfficeRow) => void; onChart: (chart: OfficeChart) => void }) {
   const payload = snapshot.tabs[tab];
   const [year, setYear] = useState("2026-27");
   const [query, setQuery] = useState("");
+  const [grade, setGrade] = useState<"all" | StudentGradeLevel>("all");
   const [sort, setSort] = useState<{ column: string; dir: "asc" | "desc" } | null>(null);
   const rows = useMemo(() => {
-    const filtered = payload.rows.filter((row) => rowInYear(row, year, tab)).filter((row) => Object.values(row.cells).join(" ").toLowerCase().includes(query.trim().toLowerCase()));
+    const byYear = payload.rows.filter((row) => rowInYear(row, year, tab)).filter((row) => Object.values(row.cells).join(" ").toLowerCase().includes(query.trim().toLowerCase()));
+    const filtered = tab === "student-list" ? filterStudentsByGrade(byYear, grade) : byYear;
     if (!sort) return filtered;
     return [...filtered].sort((a, b) => {
       const compared = (a.cells[sort.column] ?? "").localeCompare(b.cells[sort.column] ?? "", undefined, { numeric: true });
       return sort.dir === "asc" ? compared : -compared;
     });
-  }, [payload.rows, year, query, sort, tab]);
+  }, [payload.rows, year, query, sort, tab, grade]);
   return (
     <section>
       <div className="page-head">
         <div>
           <h2>{payload.title}</h2>
+          {tab === "student-list" ? <p className="lede">Student ID is Weena’s ID No. from STUDENT LIST SY2026-2027. OpenApply’s Student ID is not the ID of record. OA id is the matched OpenApply record, when there is one. Sync refreshes Weena and OpenApply through the bot, then this page reads the master sheet.</p> : null}
           {payload.note ? <p className="lede">{payload.note}</p> : null}
         </div>
+        <SyncTabButton busy={syncing} onSync={onSync} />
       </div>
+      {tab === "student-list" ? (
+        <div className="grade-bar" role="toolbar" aria-label="Grade levels">
+          <button type="button" className={grade === "all" ? "btn primary" : "btn"} onClick={() => setGrade("all")}>All</button>
+          {studentGradeLevels.map((level) => (
+            <button key={level} type="button" className={grade === level ? "btn primary" : "btn"} onClick={() => setGrade(level)}>
+              {level} ({payload.rows.filter((row) => canonicalGrade(row.cells.Grade || "") === level).length})
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className="kpis">
         {payload.kpis.map((kpi) => (
           <button key={kpi.id} className="kpi" type="button" onClick={() => { const match = payload.charts.find((chart) => chart.id === kpi.chartId); if (match) onChart(match); }}>

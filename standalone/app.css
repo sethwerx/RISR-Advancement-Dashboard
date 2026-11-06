@@ -35,7 +35,7 @@ button { cursor: pointer; }
 .kpi { text-align: left; padding: 12px 16px; }
 .kpi span { display: block; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #5c7388; font-weight: 700; }
 .kpi strong { font-family: var(--font-title); font-size: 40px; color: var(--navy); font-weight: 400; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; align-items: end; }
+.toolbar, .grade-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: end; }
 .toolbar label { font-size: 14px; }
 .btn { border: 1px solid var(--line); background: white; color: var(--navy); border-radius: 6px; padding: 8px 12px; font-weight: 600; }
 .btn.primary { background: var(--navy); color: white; border-color: var(--navy); }
