@@ -136,8 +136,10 @@ export function payloadFromTable(id: OfficeTabId, title: string, values: string[
     columns.forEach((column, columnIndex) => {
       if (column) cells[column] = (raw[columnIndex] ?? "").trim();
     });
-    const year = Number(cells["Enrollment year"]);
-    const grad = Number(cells["Graduating year"]);
+    const yearText = (cells["Enrollment year"] ?? "").trim();
+    const gradText = (cells["Graduating year"] ?? "").trim();
+    const year = /^\d{4}$/.test(yearText) ? Number(yearText) : Number.NaN;
+    const grad = /^\d{4}$/.test(gradText) ? Number(gradText) : Number.NaN;
     const badges: string[] = [];
     if (cells.Status === "LOA") badges.push("LOA");
     return [

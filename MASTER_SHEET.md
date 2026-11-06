@@ -48,7 +48,7 @@ The tab title is `Tours`. `Tours/Visits` is accepted as the same tab. Columns ar
 
 `No.`, `Student ID`, `OA id`, `Name`, `Grade`, `Homeroom`, `Gender`, `Nationality`, `DOB`, `Start date`, `Status`, `Scholarship`, `Sibling`
 
-`No.` is Weena's row number. A filled `No.` means active. `Status` `LOA` stays on the list. `Student ID` is Weena's ID No. from STUDENT LIST SY2026-2027 (`156hsISrGNmL2Q-90BsEwhhZ0n6kWwdcZ_Dp15JVXl6A`). Do not put OpenApply's Student ID field in this column. `OA id` is the matched OpenApply record when one exists, and is blank when it does not. A row with `No.` and a blank `OA id` is the mismatch "Active in Weena's sheet but no OA record". `Grade` uses Weena's levels: Pre-K 2, Pre-K 3, Pre-K 4, KG, and Grade 1 through Grade 12. The local app also accepts `Pre K2`, `Gr 1`, and `G1`. `DOB` is `YYYY-MM-DD`. The weekday job and Sync Now refresh this tab through the bot webhook. The HTML file only reads the master sheet.
+`No.` is Weena's row number. A filled `No.` means active. `Status` `LOA` stays on the list. `Student ID` is Weena's ID No. from STUDENT LIST SY2026-2027 (`156hsISrGNmL2Q-90BsEwhhZ0n6kWwdcZ_Dp15JVXl6A`). Do not put OpenApply's Student ID field in this column. `OA id` is the matched OpenApply record when one exists, and is blank when it does not. A row with `No.` and a blank `OA id` is the mismatch "Active in Weena's sheet but no OA record". `Grade` must be one of Weena's exact values: `Pre K 2`, `Pre K 3`, `Pre K 4`, `KG`, `Gr 1`, `Gr 2`, `Gr 3`, `Gr 4`, `Gr 5`, `Gr 6`, `Gr 7`, `Gr 8`, `Gr 9`, `Gr 10`, `Gr 11`, `Gr 12`. The grade buttons use those strings. `DOB` is `YYYY-MM-DD`. The weekday job and Sync Now refresh this tab through the bot webhook. The HTML file only reads the master sheet.
 
 ## Withdrawals
 

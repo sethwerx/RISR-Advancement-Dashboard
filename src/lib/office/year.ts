@@ -21,6 +21,7 @@ export function rowInYear(row: Pick<OfficeRow, "enrollmentYear" | "oaStatus" | "
     return value >= 2021 && value <= start + 1;
   }
   if (tab === "alumni") return row.gradYear === start || row.gradYear === start + 1;
+  if (tab === "student-list" && (row.enrollmentYear == null || row.enrollmentYear < 2000)) return true;
   return row.enrollmentYear === start;
 }
 

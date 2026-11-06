@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fictionalSnapshot } from "@/lib/office/sample";
+import { rowInYear } from "@/lib/office/year";
 import { masterSheetColumns } from "@/lib/office/sheet-schema";
 import { calendarWriteQuery, noShowPatch, payloadFromTable, snapshotFromSheets, tourRowsFromSheets, toursFromSheet, walkInEventBody } from "@/lib/standalone/data";
 import { canonicalGrade, filterStudentsByGrade, studentGradeLevels } from "@/lib/standalone/grades";
@@ -82,31 +83,34 @@ describe("student list grades", () => {
   const row = (grade: string): OfficeRow => ({ id: grade, cells: { Grade: grade, Name: grade }, detail: [], badges: [] });
 
   it("offers every Weena grade and filters the list", () => {
-    expect(studentGradeLevels).toEqual([
-      "Pre-K 2",
-      "Pre-K 3",
-      "Pre-K 4",
+    expect([...studentGradeLevels]).toEqual([
+      "Pre K 2",
+      "Pre K 3",
+      "Pre K 4",
       "KG",
-      "Grade 1",
-      "Grade 2",
-      "Grade 3",
-      "Grade 4",
-      "Grade 5",
-      "Grade 6",
-      "Grade 7",
-      "Grade 8",
-      "Grade 9",
-      "Grade 10",
-      "Grade 11",
-      "Grade 12",
+      "Gr 1",
+      "Gr 2",
+      "Gr 3",
+      "Gr 4",
+      "Gr 5",
+      "Gr 6",
+      "Gr 7",
+      "Gr 8",
+      "Gr 9",
+      "Gr 10",
+      "Gr 11",
+      "Gr 12",
     ]);
-    expect(canonicalGrade("Pre K2")).toBe("Pre-K 2");
-    expect(canonicalGrade("Gr 1")).toBe("Grade 1");
-    expect(canonicalGrade("G5")).toBe("Grade 5");
+    expect(canonicalGrade("Pre K 2")).toBe("Pre K 2");
+    expect(canonicalGrade("Pre-K 2")).toBe("Pre K 2");
+    expect(canonicalGrade("Gr 1")).toBe("Gr 1");
+    expect(canonicalGrade("Grade 1")).toBe("Gr 1");
+    expect(canonicalGrade("G12")).toBe("Gr 12");
     expect(canonicalGrade("Kindergarten")).toBe("KG");
-    const rows = [row("G5"), row("Pre K 3"), row("Grade 5")];
+    const rows = [row("Gr 5"), row("Pre K 3"), row("G5")];
     expect(filterStudentsByGrade(rows, "all")).toHaveLength(3);
-    expect(filterStudentsByGrade(rows, "Grade 5").map((item) => item.id)).toEqual(["G5", "Grade 5"]);
+    expect(filterStudentsByGrade(rows, "Gr 5").map((item) => item.id)).toEqual(["Gr 5", "G5"]);
+    expect(rowInYear({ enrollmentYear: undefined }, "2026-27", "student-list")).toBe(true);
   });
 });
 
