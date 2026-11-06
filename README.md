@@ -137,7 +137,7 @@ Covered:
 
 ## Local file
 
-`dist/advancement-office.html` opens by double-click. Sample data and **Load data file** work offline. Google sign-in reads the master sheet from a browser and is described in `STANDALONE.md`. The sheet layout is `MASTER_SHEET.md`.
+`dist/advancement-office.html` opens by double-click. Sample data and **Load data file** work offline. Google sign-in reads the master sheet from a browser and is described in `STANDALONE.md`. After sign-in, **Sync Now** posts to a webhook URL saved in **Settings** (this browser only) so the weekday OA tours sync can be started by hand. The sheet layout is `MASTER_SHEET.md`.
 
 ## Deployment
 

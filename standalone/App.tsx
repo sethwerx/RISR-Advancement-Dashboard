@@ -16,6 +16,7 @@ import {
 } from "@/lib/standalone/data";
 import { buildWalkInTitle } from "@/lib/title";
 import { tourInterval } from "@/lib/time";
+import { latestSyncAt, normalizeWebhookUrl, syncLogAdvanced, webhookStorageKey } from "@/lib/standalone/sync-webhook";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
 
 const TABS: { id: string; label: string; enabled: boolean }[] = [
@@ -50,6 +51,9 @@ export function App() {
   const [selectedRow, setSelectedRow] = useState<OfficeRow | null>(null);
   const [walkIn, setWalkIn] = useState(false);
   const [chart, setChart] = useState<OfficeChart | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [webhookDraft, setWebhookDraft] = useState(() => localStorage.getItem(webhookStorageKey()) ?? "");
+  const [syncState, setSyncState] = useState<"idle" | "loading" | "success" | "failure">("idle");
 
   async function signIn() {
     setError("");
@@ -156,6 +160,66 @@ export function App() {
     link.click();
   }
 
+  async function reloadSheet(): Promise<OfficeSnapshot | null> {
+    if (!token || !config.masterSheetId) return null;
+    const loaded = await loadMasterSheet(token, config.masterSheetId);
+    if (loaded.snapshot) setSnapshot(loaded.snapshot);
+    if (loaded.tours.length) setTours(loaded.tours);
+    setSource("sheet");
+    return loaded.snapshot;
+  }
+
+  function saveWebhook() {
+    const url = normalizeWebhookUrl(webhookDraft);
+    if (!url) {
+      setError("Paste a full https webhook URL from the Grok Bot routine panel.");
+      return;
+    }
+    localStorage.setItem(webhookStorageKey(), url);
+    setWebhookDraft(url);
+    setSettingsOpen(false);
+    setError("");
+    setMessage("Webhook URL saved in this browser. Sync Now will use it.");
+  }
+
+  async function syncNow() {
+    const url = normalizeWebhookUrl(localStorage.getItem(webhookStorageKey()) ?? "");
+    if (!url) {
+      setSettingsOpen(true);
+      setSyncState("idle");
+      setError("Paste the OA tours sync webhook URL, then click Sync Now again.");
+      return;
+    }
+    setSyncState("loading");
+    setError("");
+    setMessage("Requesting the OA tours, calendar, and master sheet sync. The bot runs it. This page does not call OpenApply.");
+    const before = latestSyncAt(snapshot.syncLog);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!response.ok) throw new Error(`The webhook returned ${response.status}.`);
+      setSyncState("success");
+      setMessage("Sync requested. Waiting for a new Sync Log row in the master sheet.");
+      if (!token) return;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 8000));
+        const next = await reloadSheet();
+        if (next && syncLogAdvanced(before, latestSyncAt(next.syncLog))) {
+          setMessage("The master sheet has a new Sync Log row. This view is updated.");
+          return;
+        }
+      }
+      setMessage("Sync was requested. The sheet does not have a new Sync Log row yet. The bot is still writing. Sign in again in a minute if the tours look unchanged.");
+    } catch (reason) {
+      setSyncState("failure");
+      setError(reason instanceof Error ? reason.message : "The webhook call failed. Check the URL and that the routine allows this page.");
+    }
+  }
+
   async function markNoShow(tour: LocalTour) {
     const summary = noShowPatch(tour.title).summary;
     if (token && tour.calendarEventId) {
@@ -178,6 +242,20 @@ export function App() {
           </div>
           <div className="header-actions">
             {email ? <span className="badge">{email}</span> : null}
+            {email ? (
+              <button
+                className="btn primary"
+                type="button"
+                disabled={syncState === "loading"}
+                title="Runs the OA tours, calendar, and master sheet sync, the same job as 05:55 Asia/Bangkok."
+                onClick={() => void syncNow()}
+              >
+                {syncState === "loading" ? "Requesting…" : "Sync Now"}
+              </button>
+            ) : null}
+            <button className="btn" type="button" aria-label="Sync webhook settings" onClick={() => setSettingsOpen(true)}>
+              Settings
+            </button>
             <button className="btn" type="button" onClick={signIn}>Sign in with Google</button>
             <label className="btn">
               Load data file
@@ -197,6 +275,7 @@ export function App() {
       <main className="page">
         {message ? <p className="notice">{message}</p> : null}
         {error ? <p className="warn">{error}</p> : null}
+        {email ? <p className="lede">Sync Now asks the bot to run the OA tours, calendar, and master sheet sync. It is the same job as 05:55 Asia/Bangkok.</p> : null}
         {source === "sample" ? <p className="lede">Sample data is loaded. Sign in to read the master sheet, or use Load data file.</p> : null}
         {tab === "tours" ? (
           <ToursPanel
@@ -225,6 +304,31 @@ export function App() {
       {selectedRow ? <NotesSlide title={selectedRow.cells.Name || "Record"} detail={selectedRow.detail.map((item) => [item.label, item.value])} storageKey={`risr.officeNotes.${selectedRow.id}`} onClose={() => setSelectedRow(null)} /> : null}
       {walkIn ? <WalkInDialog onClose={() => setWalkIn(false)} onCreate={createWalkIn} /> : null}
       {chart ? <ChartWindow chart={chart} logo={brand.navy} onClose={() => setChart(null)} /> : null}
+      {settingsOpen ? (
+        <div className="modal-back" onClick={() => setSettingsOpen(false)}>
+          <form
+            className="modal"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveWebhook();
+            }}
+          >
+            <header>
+              <h3 className="font-heading">Sync webhook</h3>
+              <button className="btn" type="button" onClick={() => setSettingsOpen(false)}>Close</button>
+            </header>
+            <div className="body">
+              <p className="lede">Paste the URL from the Grok Bot routine “OA tours sync (manual)”. It is stored only in this browser.</p>
+              <label>
+                Webhook URL
+                <input value={webhookDraft} onChange={(event) => setWebhookDraft(event.target.value)} placeholder="https://" autoComplete="off" />
+              </label>
+              <button className="btn primary" type="submit">Save</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

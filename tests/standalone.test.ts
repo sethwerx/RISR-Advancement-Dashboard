@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fictionalSnapshot } from "@/lib/office/sample";
 import { masterSheetColumns } from "@/lib/office/sheet-schema";
 import { calendarWriteQuery, noShowPatch, payloadFromTable, snapshotFromSheets, tourRowsFromSheets, toursFromSheet, walkInEventBody } from "@/lib/standalone/data";
+import { latestSyncAt, normalizeWebhookUrl, syncLogAdvanced } from "@/lib/standalone/sync-webhook";
 
 describe("master sheet contract", () => {
   it("matches the columns the dashboard writes", () => {
@@ -47,6 +48,17 @@ describe("master sheet contract", () => {
       Applicants: [["Name"], ["Ignored"]],
     });
     expect(loaded?.generatedAt).toBe(rich.generatedAt);
+  });
+});
+
+describe("sync webhook", () => {
+  it("accepts only an https URL and notices a newer Sync Log time", () => {
+    expect(normalizeWebhookUrl("  https://example.com/hook  ")).toBe("https://example.com/hook");
+    expect(normalizeWebhookUrl("http://example.com/hook")).toBeNull();
+    expect(normalizeWebhookUrl("not a url")).toBeNull();
+    expect(syncLogAdvanced("2026-11-06T05:55:00.000Z", "2026-11-06T06:10:00.000Z")).toBe(true);
+    expect(syncLogAdvanced("2026-11-06T05:55:00.000Z", "2026-11-06T05:55:00.000Z")).toBe(false);
+    expect(latestSyncAt([{ at: "2026-11-06T05:55:00.000Z" }, { at: "2026-11-06T06:10:00.000Z" }])).toBe("2026-11-06T06:10:00.000Z");
   });
 });
 
