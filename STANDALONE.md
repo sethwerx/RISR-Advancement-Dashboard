@@ -1,6 +1,8 @@
 # Local Advancement Office file
 
-`dist/advancement-office.html` is the dashboard as one file. On a Mac, double-click **Open Advancement Office.command**. That serves `dist/` on port 4173 and opens `http://localhost:4173/advancement-office.html`. Leave the Terminal window open while you use the app.
+`dist/advancement-office.html` is the dashboard as one file. On a Mac, double-click **Open Advancement Office.command**. It serves port 4173 and opens `http://localhost:4173/advancement-office.html`. Leave the Terminal window open while you use the app.
+
+The launcher looks for `dist/advancement-office.html` first. If that file is not there, it serves `advancement-office.html` from the same folder as the `.command` file. A downloaded pair can sit side by side. If the HTML or `python3` is missing, Terminal stays open and asks you to press Return.
 
 The public OAuth client ID and the master spreadsheet ID are already in the config block at the top of the HTML file. The client is the Internal Web client for project `advancement-office`. Its JavaScript origins are `http://localhost:4173` and `http://127.0.0.1:4173`.
 
