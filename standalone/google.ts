@@ -1,7 +1,6 @@
 import { standaloneSheetTitles } from "@/lib/office/sheet-schema";
 import { isSchoolEmail } from "@/lib/access";
-import { snapshotFromSheets, tourRowsFromSheets, type LocalTour } from "@/lib/standalone/data";
-import type { OfficeSnapshot } from "@/lib/office/types";
+import { readMasterSheets, studentListReadError, type MasterLoad } from "@/lib/standalone/data";
 import liveConfig from "./live-config.json";
 
 export type OfficeConfig = {
@@ -96,22 +95,29 @@ export async function assertSchoolAccount(token: string, domain: string): Promis
   return email;
 }
 
-async function sheetValues(token: string, spreadsheetId: string, title: string): Promise<string[][]> {
+async function sheetValues(token: string, spreadsheetId: string, title: string): Promise<{ values: string[][]; error: string }> {
   const range = `'${title.replaceAll("'", "''")}'!A1:AZ5000`;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (response.status === 400) return [];
-  if (!response.ok) throw new Error(`Could not read “${title}” (${response.status}).`);
+  if (!response.ok) {
+    const detail = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 240);
+    if (title === "Student List") return { values: [], error: studentListReadError(response.status, detail) };
+    if (response.status === 400) return { values: [], error: "" };
+    throw new Error(detail ? `Could not read “${title}” (HTTP ${response.status}). ${detail}` : `Could not read “${title}” (HTTP ${response.status}).`);
+  }
   const payload = (await response.json()) as { values?: string[][] };
-  return payload.values ?? [];
+  return { values: payload.values ?? [], error: "" };
 }
 
-export async function loadMasterSheet(token: string, spreadsheetId: string): Promise<{ snapshot: OfficeSnapshot | null; tours: LocalTour[] }> {
+export async function loadMasterSheet(token: string, spreadsheetId: string): Promise<MasterLoad> {
   const sheets: Record<string, string[][]> = {};
+  let studentListError = "";
   for (const title of standaloneSheetTitles) {
-    sheets[title] = await sheetValues(token, spreadsheetId, title);
+    const read = await sheetValues(token, spreadsheetId, title);
+    sheets[title] = read.values;
+    if (title === "Student List" && read.error) studentListError = read.error;
   }
-  return { snapshot: snapshotFromSheets(sheets), tours: tourRowsFromSheets(sheets) };
+  return { ...readMasterSheets(sheets), studentListError };
 }
 
 export async function calendarWrite(token: string, calendarId: string, path: string, method: "POST" | "PATCH", body: Record<string, unknown>) {

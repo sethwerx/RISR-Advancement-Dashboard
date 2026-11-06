@@ -27,4 +27,9 @@ export function rowInYear(row: Pick<OfficeRow, "enrollmentYear" | "oaStatus" | "
 
 export const yearOptions = ["2021-22", "2022-23", "2023-24", "2024-25", "2025-26", "2026-27", "2027-28", "2028-29", "all"];
 
+/** Student List is the current Weena roster, so the year control starts on All years. */
+export function defaultYearForTab(tab: OfficeTabId): string {
+  return tab === "student-list" ? "all" : "2026-27";
+}
+
 export { defaultAcademicYear };

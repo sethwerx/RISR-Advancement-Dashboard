@@ -8,6 +8,8 @@ The public OAuth client ID and the master spreadsheet ID are already in the conf
 
 Double-clicking the HTML file itself still opens sample data. **Load data file** and **Save data file** work from that page. Google sign-in does not run on a `file://` page, which is why the launcher uses localhost.
 
+The file opens with an empty Student List and the message **Sign in with @risr.ac.th to load school data**. It does not show fictional students as the school. **Demo data** is a separate button and labels those rows as demo. After sign-in, Student List is the master sheet tab of that name, every row, including students with no OA id and LOA. A tours-only read does not mark Student List as loaded. **Reload data** reads the sheet again and does not run the OpenApply sync. The year control starts on All years. A Start date is not an enrollment year. Grade buttons use Weena’s labels (`Pre K 2`, `Gr 1`, and the rest).
+
 Rebuild the file with:
 
 ```bash

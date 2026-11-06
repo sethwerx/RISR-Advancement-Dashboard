@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { fictionalSnapshot } from "@/lib/office/sample";
-import { rowInYear } from "@/lib/office/year";
+import { defaultYearForTab, rowInYear } from "@/lib/office/year";
 import { masterSheetColumns } from "@/lib/office/sheet-schema";
-import { calendarWriteQuery, noShowPatch, payloadFromTable, snapshotFromSheets, tourRowsFromSheets, toursFromSheet, walkInEventBody } from "@/lib/standalone/data";
+import { applyMasterLoad, calendarWriteQuery, demoOfficeSession, initialOfficeSession, isFictionalStudentRoster, noShowPatch, payloadFromTable, presentStudentList, readMasterSheets, signInStudentListMessage, snapshotFromSheets, studentListReadError, tourRowsFromSheets, toursFromSheet, walkInEventBody } from "@/lib/standalone/data";
 import { canonicalGrade, filterStudentsByGrade, studentGradeLevels } from "@/lib/standalone/grades";
 import { dashboardTabs, syncControlLabel } from "@/lib/standalone/tabs";
 import { describeSyncSchedule, latestSyncAt, normalizeWebhookUrl, parseSyncSchedule, syncLogAdvanced, syncWebhookBody } from "@/lib/standalone/sync-webhook";
@@ -47,11 +47,29 @@ describe("master sheet contract", () => {
     expect(preferred[0].students).toBe("Preferred tab");
     expect(tourRowsFromSheets({ Tours: [["Students"], ["Only tours"]] })[0].students).toBe("Only tours");
     const rich = fictionalSnapshot("2026-11-03T00:00:00.000Z");
-    const loaded = snapshotFromSheets({
+    const ignoredSample = snapshotFromSheets({
       Snapshot: [["snapshot-v1"], [JSON.stringify(rich)]],
       Applicants: [["Name"], ["Ignored"]],
     });
+    expect(ignoredSample?.tabs.applicants.rows[0].cells.Name).toBe("Ignored");
+    expect(ignoredSample?.tabs["student-list"].rows).toEqual([]);
+    const live = {
+      ...rich,
+      mock: false as const,
+      syncLog: [{ at: rich.generatedAt, scope: "all tabs", rows: 1, mode: "live" as const, note: "Live snapshot written to the master sheet." }],
+      tabs: { ...rich.tabs, "student-list": { ...rich.tabs["student-list"], rows: [] } },
+    };
+    const loaded = snapshotFromSheets({
+      Snapshot: [["snapshot-v1"], [JSON.stringify(live)]],
+      Applicants: [["Name"], ["Ignored"]],
+    });
     expect(loaded?.generatedAt).toBe(rich.generatedAt);
+    expect(loaded?.tabs["student-list"].rows).toEqual([]);
+    const sampleLog = snapshotFromSheets({
+      Snapshot: [["snapshot-v1"], [JSON.stringify({ ...live, syncLog: [{ ...live.syncLog[0], mode: "sample" }] })]],
+      Applicants: [["Name"], ["From sheet"]],
+    });
+    expect(sampleLog?.tabs.applicants.rows[0].cells.Name).toBe("From sheet");
   });
 });
 
@@ -111,6 +129,105 @@ describe("student list grades", () => {
     expect(filterStudentsByGrade(rows, "all")).toHaveLength(3);
     expect(filterStudentsByGrade(rows, "Gr 5").map((item) => item.id)).toEqual(["Gr 5", "G5"]);
     expect(rowInYear({ enrollmentYear: undefined }, "2026-27", "student-list")).toBe(true);
+  });
+
+  it("keeps a missing enrollment year and maps a full Weena sheet", () => {
+    expect(defaultYearForTab("student-list")).toBe("all");
+    expect(rowInYear({ enrollmentYear: undefined }, "2026-27", "student-list")).toBe(true);
+    const opened = initialOfficeSession();
+    expect(opened.studentListOrigin).toBe("empty");
+    expect(opened.tours).toEqual([]);
+    expect(opened.snapshot.tabs["student-list"].rows).toEqual([]);
+    expect(presentStudentList(fictionalSnapshot().tabs["student-list"], "empty").rows).toEqual([]);
+    expect(presentStudentList(fictionalSnapshot().tabs["student-list"], "empty").note).toBe(signInStudentListMessage);
+
+    const demo = demoOfficeSession();
+    expect(demo.studentListOrigin).toBe("demo");
+    expect(demo.snapshot.tabs["student-list"].rows.map((row) => row.cells.Name).sort()).toEqual(["Ben Rahman", "Chloe Nguyen", "Isla Rahman", "Yusuf Demir"]);
+    const demoView = presentStudentList(demo.snapshot.tabs["student-list"], "demo");
+    expect(demoView.kpis.map((item) => item.label)).toEqual(["Demo (4)"]);
+    expect(demoView.rows.every((row) => row.badges.includes("Demo"))).toBe(true);
+    expect(demoView.kpis.some((item) => item.label === "Active (has No.)")).toBe(false);
+
+    const grades = ["Pre K 2", "Pre K 3", "Pre K 4", "KG", "Gr 1", "Gr 2", "Gr 3", "Gr 4", "Gr 5", "Gr 6", "Gr 7", "Gr 8", "Gr 9", "Gr 10", "Gr 11", "Gr 12"];
+    const headers = [...masterSheetColumns["Student List"]];
+    const body = Array.from({ length: 381 }, (_, index) => {
+      const loa = index === 380;
+      const grade = grades[index % grades.length];
+      return [loa ? "" : String(index + 1), String(30000 + index), index < 60 ? "" : String(80000 + index), `Student ${index}`, grade, "", "", "", "", "10 Aug 2026", loa ? "LOA" : "Active", "", ""];
+    });
+    const loaded = readMasterSheets({
+      Snapshot: [["snapshot-v1"], [JSON.stringify(fictionalSnapshot())]],
+      "Student List": [headers, ...body],
+      Tours: [["Students"], ["Ada Example"]],
+    });
+    expect(loaded.studentListFromSheet).toBe(true);
+    const applied = applyMasterLoad(demo, loaded, "2026-11-06T03:00:00.000Z");
+    const list = applied.session.snapshot.tabs["student-list"];
+    expect(applied.error).toBe("");
+    expect(applied.session.studentListOrigin).toBe("sheet");
+    expect(applied.session.toursOrigin).toBe("sheet");
+    expect(list.rows).toHaveLength(381);
+    expect(list.rows.some((row) => row.cells.Name === "Yusuf Demir")).toBe(false);
+    expect(list.rows.filter((row) => row.cells.Status === "Active")).toHaveLength(380);
+    expect(list.rows.filter((row) => row.cells.Status === "LOA")).toHaveLength(1);
+    expect(list.rows.filter((row) => !row.cells["OA id"])).toHaveLength(60);
+    expect(list.rows.every((row) => row.enrollmentYear == null)).toBe(true);
+    expect(list.rows.filter((row) => rowInYear(row, "all", "student-list"))).toHaveLength(381);
+    expect(list.rows.filter((row) => rowInYear(row, "2026-27", "student-list"))).toHaveLength(381);
+    expect(filterStudentsByGrade(list.rows, "all")).toHaveLength(381);
+    expect(filterStudentsByGrade(list.rows, "Pre K 2").length).toBeGreaterThan(0);
+    expect(filterStudentsByGrade(list.rows, "Gr 1").every((row) => canonicalGrade(row.cells.Grade) === "Gr 1")).toBe(true);
+    expect(list.kpis.find((item) => item.label === "Active (has No.)")?.value).toBe("380");
+    expect(list.columns.slice(0, 5)).toEqual(["No.", "Student ID", "OA id", "Name", "Grade"]);
+
+    const toursOnly = readMasterSheets({
+      Tours: [["Students"], ["Ada Example"]],
+      Snapshot: [["snapshot-v1"], [JSON.stringify(fictionalSnapshot())]],
+    });
+    expect(toursOnly.studentListFromSheet).toBe(false);
+    const partial = applyMasterLoad(demo, toursOnly, "2026-11-06T03:05:00.000Z");
+    expect(partial.session.toursOrigin).toBe("sheet");
+    expect(partial.session.studentListOrigin).toBe("empty");
+    expect(partial.session.snapshot.tabs["student-list"].rows).toEqual([]);
+    expect(partial.error).toMatch(/Student List did not load/);
+
+    const failed = applyMasterLoad(applied.session, { snapshot: fictionalSnapshot(), tours: [], studentListFromSheet: false }, "2026-11-06T03:10:00.000Z");
+    expect(failed.session.studentListOrigin).toBe("sheet");
+    expect(failed.session.snapshot.tabs["student-list"].rows).toHaveLength(381);
+    expect(failed.session.snapshot.tabs["student-list"].rows.some((row) => row.cells.Name === "Yusuf Demir")).toBe(false);
+    expect(failed.error).toMatch(/Student List did not load/);
+
+    expect(isFictionalStudentRoster(demo.snapshot.tabs["student-list"].rows)).toBe(true);
+    const claimedSheet = applyMasterLoad(initialOfficeSession(), {
+      snapshot: { ...demo.snapshot, mock: false },
+      tours: demo.tours,
+      studentListFromSheet: true,
+    }, "2026-11-06T03:12:00.000Z");
+    expect(claimedSheet.session.studentListOrigin).toBe("empty");
+    expect(claimedSheet.session.toursOrigin).toBe("sheet");
+    expect(claimedSheet.session.snapshot.tabs["student-list"].rows).toEqual([]);
+    expect(presentStudentList(demo.snapshot.tabs["student-list"], "sheet").rows).toEqual([]);
+    const httpFailed = applyMasterLoad(demo, {
+      snapshot: null,
+      tours: demo.tours,
+      studentListFromSheet: false,
+      studentListError: studentListReadError(400, "Unable to parse range: Student List"),
+    }, "2026-11-06T03:15:00.000Z");
+    expect(httpFailed.error).toContain("HTTP 400");
+    expect(httpFailed.session.studentListOrigin).toBe("empty");
+    expect(httpFailed.session.snapshot.tabs["student-list"].rows).toEqual([]);
+    expect(httpFailed.session.snapshot.tabs["student-list"].rows.some((row) => row.cells.Name === "Yusuf Demir")).toBe(false);
+
+    const aliased = payloadFromTable("student-list", "Student List", [
+      ["No", "ID No.", "OA id", "Name", "Grade", "Start Date", "Status"],
+      ["9", "55555", "", "Alias Child", "Gr 1", "10 Aug 2026", "Active"],
+    ]);
+    expect(aliased?.rows[0].cells["Student ID"]).toBe("55555");
+    expect(aliased?.rows[0].cells["Start date"]).toBe("10 Aug 2026");
+    expect(aliased?.rows[0].enrollmentYear).toBeUndefined();
+    expect(filterStudentsByGrade(aliased?.rows ?? [], "Gr 1")).toHaveLength(1);
+    expect(snapshotFromSheets({ Snapshot: [["snapshot-v1"], [JSON.stringify(fictionalSnapshot())]] })?.tabs["student-list"].rows ?? []).toEqual([]);
   });
 });
 

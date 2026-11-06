@@ -1,20 +1,27 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { canonicalGrade, filterStudentsByGrade, studentGradeLevels, type StudentGradeLevel } from "@/lib/standalone/grades";
 import { dashboardTabs, syncControlLabel } from "@/lib/standalone/tabs";
 import { walkInFormFields } from "@/tabs/tours/walkinForm.config";
-import { fictionalSnapshot } from "@/lib/office/sample";
-import { rowInYear, yearOptions } from "@/lib/office/year";
+import { defaultYearForTab, rowInYear, yearOptions } from "@/lib/office/year";
 import type { OfficeChart, OfficeRow, OfficeSnapshot, OfficeTabId } from "@/lib/office/types";
 import {
+  applyMasterLoad,
   calendarWriteQuery,
+  demoOfficeSession,
+  demoStudentListBanner,
+  formatLoadedAt,
+  initialOfficeSession,
   noShowPatch,
   notesPatch,
-  sampleTours,
-  snapshotFromSheets,
-  tourRowsFromSheets,
+  presentStudentList,
+  readMasterSheets,
+  signInStudentListMessage,
+  studentListSourceLabel,
   walkInEventBody,
+  type DatasetOrigin,
   type LocalTour,
+  type OfficeSession,
 } from "@/lib/standalone/data";
 import { buildWalkInTitle } from "@/lib/title";
 import { tourInterval } from "@/lib/time";
@@ -32,19 +39,22 @@ import {
 } from "@/lib/standalone/sync-webhook";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
 
-type Source = "sample" | "file" | "sheet";
-
 export function App() {
   const brand = window.__BRAND ?? { white: "", navy: "" };
   const config = readConfig();
   const [tab, setTab] = useState("tours");
-  const [source, setSource] = useState<Source>("sample");
-  const [snapshot, setSnapshot] = useState<OfficeSnapshot>(() => fictionalSnapshot());
-  const [tours, setTours] = useState<LocalTour[]>(() => sampleTours());
+  const [snapshot, setSnapshot] = useState<OfficeSnapshot>(() => initialOfficeSession().snapshot);
+  const [tours, setTours] = useState<LocalTour[]>([]);
+  const [studentListOrigin, setStudentListOrigin] = useState<DatasetOrigin>("empty");
+  const [toursOrigin, setToursOrigin] = useState<DatasetOrigin>("empty");
+  const [studentListLoadedAt, setStudentListLoadedAt] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [reloadState, setReloadState] = useState<"idle" | "loading">("idle");
+  const sessionRef = useRef<OfficeSession>(initialOfficeSession());
+  sessionRef.current = { snapshot, tours, studentListOrigin, toursOrigin, studentListLoadedAt };
   const [selectedTour, setSelectedTour] = useState<LocalTour | null>(null);
   const [selectedRow, setSelectedRow] = useState<OfficeRow | null>(null);
   const [walkIn, setWalkIn] = useState(false);
@@ -53,6 +63,20 @@ export function App() {
   const [webhookDraft, setWebhookDraft] = useState(() => localStorage.getItem(webhookStorageKey()) ?? "");
   const [schedule, setSchedule] = useState<SyncSchedule>(() => parseSyncSchedule(localStorage.getItem(scheduleStorageKey())));
   const [syncState, setSyncState] = useState<"idle" | "loading" | "success" | "failure">("idle");
+
+  function commitSession(session: OfficeSession) {
+    setSnapshot(session.snapshot);
+    setTours(session.tours);
+    setStudentListOrigin(session.studentListOrigin);
+    setToursOrigin(session.toursOrigin);
+    setStudentListLoadedAt(session.studentListLoadedAt);
+  }
+
+  function showDemo() {
+    commitSession(demoOfficeSession());
+    setError("");
+    setMessage("Demo data is on. These names are fictional and are not the school roster.");
+  }
 
   async function signIn() {
     setError("");
@@ -71,14 +95,26 @@ export function App() {
     try {
       const access = await requestSchoolToken(config);
       const account = await assertSchoolAccount(access, config.allowedDomain);
-      const loaded = await loadMasterSheet(access, config.masterSheetId);
-      if (!loaded.snapshot && loaded.tours.length === 0) throw new Error("The master sheet has no dashboard tabs yet.");
-      if (loaded.snapshot) setSnapshot(loaded.snapshot);
-      if (loaded.tours.length) setTours(loaded.tours);
       setToken(access);
       setEmail(account);
-      setSource("sheet");
-      setMessage(`Signed in as ${account}. Data is from the master sheet.`);
+      try {
+        const loaded = await loadMasterSheet(access, config.masterSheetId);
+        const applied = applyMasterLoad(sessionRef.current, loaded, new Date().toISOString());
+        commitSession(applied.session);
+        const count = applied.session.studentListOrigin === "sheet" ? applied.session.snapshot.tabs["student-list"].rows.length : 0;
+        if (applied.error) {
+          setError(applied.error);
+          setMessage(`Signed in as ${account}. Student List: ${count} rows.`);
+        } else {
+          setError("");
+          setMessage(`Signed in as ${account}. Student List: ${count} rows.`);
+        }
+      } catch (reason) {
+        const cleared = applyMasterLoad(sessionRef.current, { snapshot: null, tours: [], studentListFromSheet: false }, new Date().toISOString());
+        commitSession(cleared.session);
+        setError(reason instanceof Error ? reason.message : "Could not read the master sheet.");
+        setMessage(`Signed in as ${account}. Student List: 0 rows.`);
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Sign-in failed.");
     }
@@ -89,23 +125,45 @@ export function App() {
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result)) as Record<string, unknown>;
+        const loadedAt = new Date().toISOString();
         if (parsed.tabs && typeof parsed.tabs === "object") {
-          setSnapshot(parsed as unknown as OfficeSnapshot);
+          const next = parsed as unknown as OfficeSnapshot;
+          if (next.mock) {
+            commitSession(demoOfficeSession(next.generatedAt));
+            setMessage(`${file.name} is demo data, not the school roster.`);
+          } else {
+            setSnapshot(next);
+            setTours([]);
+            setToursOrigin("empty");
+            setStudentListOrigin("file");
+            setStudentListLoadedAt(loadedAt);
+            setMessage(`Loaded ${file.name}.`);
+          }
         } else if (parsed.snapshot && typeof parsed.snapshot === "object") {
-          setSnapshot(parsed.snapshot as OfficeSnapshot);
-          if (Array.isArray(parsed.tours)) setTours(parsed.tours as LocalTour[]);
+          const next = parsed.snapshot as OfficeSnapshot;
+          if (next.mock) {
+            commitSession(demoOfficeSession(next.generatedAt));
+            setMessage(`${file.name} is demo data, not the school roster.`);
+          } else {
+            setSnapshot(next);
+            if (Array.isArray(parsed.tours)) {
+              setTours(parsed.tours as LocalTour[]);
+              setToursOrigin("file");
+            }
+            setStudentListOrigin("file");
+            setStudentListLoadedAt(loadedAt);
+            setMessage(`Loaded ${file.name}.`);
+          }
         } else if (parsed.sheets && typeof parsed.sheets === "object") {
-          const sheets = parsed.sheets as Record<string, string[][]>;
-          const next = snapshotFromSheets(sheets);
-          if (next) setSnapshot(next);
-          const tourRows = tourRowsFromSheets(sheets);
-          if (tourRows.length) setTours(tourRows);
+          const loaded = readMasterSheets(parsed.sheets as Record<string, string[][]>);
+          const applied = applyMasterLoad(sessionRef.current, loaded, loadedAt, "file");
+          commitSession(applied.session);
+          if (applied.error) setError(applied.error);
+          setMessage(applied.error ? `${file.name} did not include a Student List tab.` : `Loaded ${file.name}.`);
         } else {
           throw new Error("Unrecognized data file.");
         }
-        setSource("file");
-        setMessage(`Loaded ${file.name}.`);
-        setError("");
+        if (!parsed.sheets) setError("");
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Could not read that file.");
       }
@@ -160,12 +218,42 @@ export function App() {
   }
 
   async function reloadSheet(): Promise<OfficeSnapshot | null> {
-    if (!token || !config.masterSheetId) return null;
+    if (!token || !config.masterSheetId) {
+      setError("Sign in with @risr.ac.th before reloading the master sheet.");
+      return null;
+    }
     const loaded = await loadMasterSheet(token, config.masterSheetId);
-    if (loaded.snapshot) setSnapshot(loaded.snapshot);
-    if (loaded.tours.length) setTours(loaded.tours);
-    setSource("sheet");
-    return loaded.snapshot;
+    const applied = applyMasterLoad(sessionRef.current, loaded, new Date().toISOString());
+    commitSession(applied.session);
+    if (applied.error) setError(applied.error);
+    else setError("");
+    return applied.session.snapshot;
+  }
+
+  async function reloadData() {
+    setReloadState("loading");
+    setMessage("");
+    try {
+      if (!token || !config.masterSheetId) {
+        setError("Sign in with @risr.ac.th before reloading the master sheet.");
+        return;
+      }
+      const loaded = await loadMasterSheet(token, config.masterSheetId);
+      const applied = applyMasterLoad(sessionRef.current, loaded, new Date().toISOString());
+      commitSession(applied.session);
+      const count = applied.session.snapshot.tabs["student-list"].rows.length;
+      if (applied.error) {
+        setError(applied.error);
+        setMessage(`Student List: ${applied.session.studentListOrigin === "sheet" ? count : 0} rows.`);
+      } else {
+        setError("");
+        setMessage(`Reloaded the master sheet. Student List: ${count} rows.`);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not reload the master sheet.");
+    } finally {
+      setReloadState("idle");
+    }
   }
 
   function saveWebhook() {
@@ -257,7 +345,11 @@ export function App() {
             <button className="btn" type="button" aria-label="Sync webhook settings" onClick={() => setSettingsOpen(true)}>
               Settings
             </button>
+            <button className="btn" type="button" onClick={() => void reloadData()} disabled={reloadState === "loading"}>
+              {reloadState === "loading" ? "Reloading…" : "Reload data"}
+            </button>
             <button className="btn" type="button" onClick={signIn}>Sign in with Google</button>
+            <button className="btn" type="button" onClick={showDemo}>Demo data</button>
             <label className="btn">
               Load data file
               <input hidden type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) onFile(file); }} />
@@ -275,12 +367,14 @@ export function App() {
       </nav>
       <main className="page">
         {message ? <p className="notice">{message}</p> : null}
-        {error ? <p className="warn">{error}</p> : null}
-        {email ? <p className="lede">Sync Now asks the bot to run the OA tours, calendar, and master sheet sync now. Saved schedule: {describeSyncSchedule(schedule)}. Asia/Bangkok. The morning job still belongs to the Grok Bot routine.</p> : null}
-        {source === "sample" ? <p className="lede">Sample data is loaded. Sign in to read the master sheet, or use Load data file.</p> : null}
+        {error ? <p className="warn" role="alert">{error}</p> : null}
+        {email ? <p className="lede">Sync Now asks the bot to run the OA tours, calendar, and master sheet sync now. Saved schedule: {describeSyncSchedule(schedule)}. Asia/Bangkok. The morning job still belongs to the Grok Bot routine. Reload data reads the master sheet again and does not run that sync.</p> : null}
+        {studentListOrigin === "empty" && toursOrigin === "empty" ? <p className="signin-banner" role="status">{signInStudentListMessage}</p> : null}
+        {studentListOrigin === "demo" || toursOrigin === "demo" ? <p className="sample-banner" role="status">{demoStudentListBanner}</p> : null}
         {tab === "tours" ? (
           <ToursPanel
             tours={tours}
+            toursOrigin={toursOrigin}
             logo={brand.navy}
             syncing={syncState === "loading"}
             onSync={() => void syncNow()}
@@ -293,8 +387,12 @@ export function App() {
           <OfficePanel
             tab={tab as OfficeTabId}
             snapshot={snapshot}
+            studentListOrigin={studentListOrigin}
+            studentListLoadedAt={studentListLoadedAt}
             syncing={syncState === "loading"}
+            reloading={reloadState === "loading"}
             onSync={() => void syncNow()}
+            onReload={() => void reloadData()}
             onOpen={setSelectedRow}
             onChart={setChart}
           />
@@ -385,7 +483,7 @@ function SyncTabButton({ busy, onSync }: { busy: boolean; onSync: () => void }) 
   );
 }
 
-function ToursPanel({ tours, logo, syncing, onSync, onNoShow, onOpen, onWalkIn, onChart }: { tours: LocalTour[]; logo: string; syncing: boolean; onSync: () => void; onNoShow: (tour: LocalTour) => void; onOpen: (tour: LocalTour) => void; onWalkIn: () => void; onChart: () => void }) {
+function ToursPanel({ tours, toursOrigin, logo, syncing, onSync, onNoShow, onOpen, onWalkIn, onChart }: { tours: LocalTour[]; toursOrigin: DatasetOrigin; logo: string; syncing: boolean; onSync: () => void; onNoShow: (tour: LocalTour) => void; onOpen: (tour: LocalTour) => void; onWalkIn: () => void; onChart: () => void }) {
   const [query, setQuery] = useState("");
   const visible = tours.filter((tour) => `${tour.students} ${tour.host} ${tour.date}`.toLowerCase().includes(query.trim().toLowerCase()));
   return (
@@ -394,6 +492,8 @@ function ToursPanel({ tours, logo, syncing, onSync, onNoShow, onOpen, onWalkIn, 
         <div>
           <h2>School Tours/Visits</h2>
           <p className="lede">Times are Asia/Bangkok. No-show and walk-in writes use the signed-in account on the admissions calendar, with sendUpdates=none.</p>
+          {toursOrigin === "empty" ? <p className="signin-banner" role="status">{signInStudentListMessage}</p> : null}
+          {toursOrigin === "demo" ? <p className="sample-banner" role="status">{demoStudentListBanner}</p> : null}
         </div>
         <div className="header-actions">
           <SyncTabButton busy={syncing} onSync={onSync} />
@@ -422,12 +522,18 @@ function ToursPanel({ tours, logo, syncing, onSync, onNoShow, onOpen, onWalkIn, 
   );
 }
 
-function OfficePanel({ tab, snapshot, syncing, onSync, onOpen, onChart }: { tab: OfficeTabId; snapshot: OfficeSnapshot; syncing: boolean; onSync: () => void; onOpen: (row: OfficeRow) => void; onChart: (chart: OfficeChart) => void }) {
-  const payload = snapshot.tabs[tab];
-  const [year, setYear] = useState("2026-27");
+function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, syncing, reloading, onSync, onReload, onOpen, onChart }: { tab: OfficeTabId; snapshot: OfficeSnapshot; studentListOrigin: DatasetOrigin; studentListLoadedAt: string | null; syncing: boolean; reloading: boolean; onSync: () => void; onReload: () => void; onOpen: (row: OfficeRow) => void; onChart: (chart: OfficeChart) => void }) {
+  const raw = snapshot.tabs[tab];
+  const payload = tab === "student-list" ? presentStudentList(raw, studentListOrigin) : raw;
+  const [year, setYear] = useState(() => defaultYearForTab(tab));
   const [query, setQuery] = useState("");
   const [grade, setGrade] = useState<"all" | StudentGradeLevel>("all");
   const [sort, setSort] = useState<{ column: string; dir: "asc" | "desc" } | null>(null);
+  useEffect(() => {
+    setYear(defaultYearForTab(tab));
+    setGrade("all");
+    setQuery("");
+  }, [tab]);
   const rows = useMemo(() => {
     const byYear = payload.rows.filter((row) => rowInYear(row, year, tab)).filter((row) => Object.values(row.cells).join(" ").toLowerCase().includes(query.trim().toLowerCase()));
     const filtered = tab === "student-list" ? filterStudentsByGrade(byYear, grade) : byYear;
@@ -442,10 +548,16 @@ function OfficePanel({ tab, snapshot, syncing, onSync, onOpen, onChart }: { tab:
       <div className="page-head">
         <div>
           <h2>{payload.title}</h2>
-          {tab === "student-list" ? <p className="lede">Student ID is Weena’s ID No. from STUDENT LIST SY2026-2027. OpenApply’s Student ID is not the ID of record. OA id is the matched OpenApply record, when there is one. Sync refreshes Weena and OpenApply through the bot, then this page reads the master sheet.</p> : null}
-          {payload.note ? <p className="lede">{payload.note}</p> : null}
+          {tab === "student-list" && studentListOrigin === "empty" ? <p className="signin-banner" role="status">{signInStudentListMessage}</p> : null}
+          {tab === "student-list" && studentListOrigin === "demo" ? <p className="sample-banner" role="status">{demoStudentListBanner}</p> : null}
+          {tab === "student-list" && (studentListOrigin === "sheet" || studentListOrigin === "file") ? <p className="lede">Student ID is Weena’s ID No. from STUDENT LIST SY2026-2027. OpenApply’s Student ID is not the ID of record. OA id is the matched OpenApply record, when there is one. Sync refreshes Weena and OpenApply through the bot. Reload data reads the master sheet again.</p> : null}
+          {tab === "student-list" ? <p className="lede" data-student-source={studentListOrigin}>Source: {studentListSourceLabel(studentListOrigin)} · Rows: {payload.rows.length} · Last loaded: {formatLoadedAt(studentListLoadedAt)}</p> : null}
+          {payload.note && tab !== "student-list" ? <p className="lede">{payload.note}</p> : null}
         </div>
-        <SyncTabButton busy={syncing} onSync={onSync} />
+        <div className="header-actions">
+          {tab === "student-list" ? <button className="btn" type="button" onClick={onReload} disabled={reloading}>{reloading ? "Reloading…" : "Reload data"}</button> : null}
+          <SyncTabButton busy={syncing} onSync={onSync} />
+        </div>
       </div>
       {tab === "student-list" ? (
         <div className="grade-bar" role="toolbar" aria-label="Grade levels">
@@ -482,7 +594,7 @@ function OfficePanel({ tab, snapshot, syncing, onSync, onOpen, onChart }: { tab:
           </tbody>
         </table>
       </div>
-      <p className="lede">{rows.length} rows</p>
+      <p className="lede">Showing {rows.length} of {payload.rows.length}</p>
     </section>
   );
 }

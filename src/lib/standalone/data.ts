@@ -1,6 +1,7 @@
 import { masterSheetColumns } from "@/lib/office/sheet-schema";
+import { fictionalSnapshot } from "@/lib/office/sample";
 import { decodeSnapshot } from "@/lib/office/snapshot-json";
-import type { OfficeChart, OfficeRow, OfficeSnapshot, OfficeTabId, OfficeTabPayload } from "@/lib/office/types";
+import type { OfficeChart, OfficeKpi, OfficeRow, OfficeSnapshot, OfficeTabId, OfficeTabPayload } from "@/lib/office/types";
 import { withNoShowTag } from "@/lib/title";
 
 export type LocalTour = {
@@ -118,6 +119,156 @@ export function toursFromSheet(values: string[][]): LocalTour[] {
   });
 }
 
+/** First paint, before a school account reads the master sheet. */
+export const signInStudentListMessage = "Sign in with @risr.ac.th to load school data";
+
+/** Explicit demo only. These rows are the fictional sample, never the Weena roster. */
+export const demoStudentListBanner = "Demo data — not the school roster. These names are fictional.";
+
+export type DatasetOrigin = "empty" | "demo" | "file" | "sheet";
+
+export type OfficeSession = {
+  snapshot: OfficeSnapshot;
+  tours: LocalTour[];
+  studentListOrigin: DatasetOrigin;
+  toursOrigin: DatasetOrigin;
+  studentListLoadedAt: string | null;
+};
+
+export type MasterLoad = {
+  snapshot: OfficeSnapshot | null;
+  tours: LocalTour[];
+  studentListFromSheet: boolean;
+  studentListError?: string;
+};
+
+const fictionalStudentNames = ["Ben Rahman", "Chloe Nguyen", "Isla Rahman", "Yusuf Demir"];
+
+/** The four-name sample roster must never be treated as the school. */
+export function isFictionalStudentRoster(rows: { cells: Record<string, string> }[]): boolean {
+  const names = rows.map((row) => (row.cells.Name ?? "").trim()).filter(Boolean).sort();
+  return names.length > 0 && names.length <= fictionalStudentNames.length && names.every((name) => fictionalStudentNames.includes(name));
+}
+
+export function studentListReadError(status: number, body = ""): string {
+  const detail = body.replace(/\s+/g, " ").trim().slice(0, 240);
+  return detail ? `Could not read “Student List” (HTTP ${status}). ${detail}` : `Could not read “Student List” (HTTP ${status}).`;
+}
+
+function snapshotIsSample(snapshot: OfficeSnapshot): boolean {
+  if (snapshot.mock) return true;
+  if (snapshot.syncLog.some((entry) => entry.mode === "sample" || /fictional sample/i.test(entry.note))) return true;
+  return isFictionalStudentRoster(snapshot.tabs["student-list"]?.rows ?? []);
+}
+
+export function studentListSourceLabel(origin: DatasetOrigin): string {
+  if (origin === "sheet") return "Master sheet";
+  if (origin === "file") return "Loaded file";
+  if (origin === "demo") return "Demo";
+  return "Not loaded";
+}
+
+export function formatLoadedAt(value: string | null): string {
+  if (!value) return "Not loaded";
+  return value.replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+}
+
+/** Show demo rows only in demo mode, and never show leftover names while the roster is not loaded. */
+export function presentStudentList(payload: OfficeTabPayload, origin: DatasetOrigin): OfficeTabPayload {
+  if (origin === "demo") {
+    const rows = payload.rows.map((row) => ({
+      ...row,
+      badges: row.badges.includes("Demo") ? row.badges : ["Demo", ...row.badges],
+    }));
+    return {
+      ...payload,
+      rows,
+      kpis: [{ id: "demo", label: `Demo (${rows.length})`, value: String(rows.length), chartId: "by-grade" }],
+      charts: [],
+      gaps: [],
+      reconciliation: undefined,
+      mismatches: [],
+      note: demoStudentListBanner,
+    };
+  }
+  if (origin === "empty" || ((origin === "sheet" || origin === "file") && isFictionalStudentRoster(payload.rows))) {
+    return {
+      ...payload,
+      rows: [],
+      kpis: [{ id: "rows", label: "Rows", value: "0", chartId: "by-grade" }],
+      charts: [],
+      gaps: [],
+      reconciliation: undefined,
+      mismatches: [],
+      note: signInStudentListMessage,
+    };
+  }
+  return payload;
+}
+
+const studentListHeaderAliases: Record<string, string> = {
+  no: "No.",
+  "no.": "No.",
+  number: "No.",
+  "student id": "Student ID",
+  "id no": "Student ID",
+  "id no.": "Student ID",
+  "id number": "Student ID",
+  "oa id": "OA id",
+  "openapply id": "OA id",
+  name: "Name",
+  "student name": "Name",
+  grade: "Grade",
+  "grade level": "Grade",
+  homeroom: "Homeroom",
+  gender: "Gender",
+  nationality: "Nationality",
+  dob: "DOB",
+  "date of birth": "DOB",
+  "birth date": "DOB",
+  "start date": "Start date",
+  status: "Status",
+  scholarship: "Scholarship",
+  sibling: "Sibling",
+};
+
+function canonicalHeader(id: OfficeTabId, header: string): string {
+  const trimmed = header.trim();
+  if (id !== "student-list") return trimmed;
+  return studentListHeaderAliases[trimmed.toLowerCase().replace(/\s+/g, " ")] ?? trimmed;
+}
+
+function sheetByTitle(sheets: Record<string, string[][]>, title: string): string[][] {
+  const direct = sheets[title];
+  if (direct && direct.length) return direct;
+  const key = Object.keys(sheets).find((name) => name.trim().toLowerCase() === title.trim().toLowerCase());
+  return key ? sheets[key] ?? [] : [];
+}
+
+/** Student List has no enrollment-year column. A Start date must not become one. */
+function enrollmentYearFromCells(id: OfficeTabId, cells: Record<string, string>): number | undefined {
+  if (id === "student-list") return undefined;
+  const yearText = (cells["Enrollment year"] ?? "").trim();
+  if (!/^\d{4}$/.test(yearText)) return undefined;
+  const year = Number(yearText);
+  return year >= 2000 && year <= 2100 ? year : undefined;
+}
+
+function studentListKpis(rows: OfficeRow[]): { kpis: OfficeKpi[]; charts: OfficeChart[] } {
+  const active = rows.filter((row) => (row.cells["No."] ?? "").trim()).length;
+  return {
+    kpis: [
+      { id: "active", label: "Active (has No.)", value: String(active), chartId: "by-grade" },
+      { id: "rows", label: "Rows", value: String(rows.length), chartId: "by-grade" },
+      { id: "loa", label: "LOA", value: String(rows.filter((row) => row.cells.Status === "LOA" || row.badges.includes("LOA")).length), chartId: "by-status" },
+    ],
+    charts: [
+      { id: "by-grade", title: "Headcount by grade", points: countColumn(rows, "Grade") },
+      { id: "by-status", title: "Status", points: countColumn(rows, "Status") },
+    ],
+  };
+}
+
 function countColumn(rows: OfficeRow[], column: string): OfficeChart["points"] {
   const counts = new Map<string, number>();
   for (const row of rows) {
@@ -129,23 +280,33 @@ function countColumn(rows: OfficeRow[], column: string): OfficeChart["points"] {
 
 export function payloadFromTable(id: OfficeTabId, title: string, values: string[][]): OfficeTabPayload | null {
   if (!values.length || !values[0].some((cell) => cell.trim())) return null;
-  const columns = values[0].map((cell) => cell.trim());
+  const rawHeaders = values[0].map((cell) => cell.trim());
+  const columns =
+    id === "student-list"
+      ? [
+          ...masterSheetColumns["Student List"],
+          ...rawHeaders
+            .map((header) => canonicalHeader(id, header))
+            .filter((header) => header && !masterSheetColumns["Student List"].includes(header as (typeof masterSheetColumns)["Student List"][number])),
+        ]
+      : rawHeaders.filter(Boolean);
   const rows: OfficeRow[] = values.slice(1).flatMap((raw, rowIndex) => {
-    if (!raw.some((cell) => cell.trim())) return [];
+    if (!raw.some((cell) => cell?.trim())) return [];
     const cells: Record<string, string> = {};
-    columns.forEach((column, columnIndex) => {
-      if (column) cells[column] = (raw[columnIndex] ?? "").trim();
+    rawHeaders.forEach((column, columnIndex) => {
+      const name = canonicalHeader(id, column);
+      if (!name) return;
+      const value = (raw[columnIndex] ?? "").trim();
+      if (!cells[name]) cells[name] = value;
     });
-    const yearText = (cells["Enrollment year"] ?? "").trim();
     const gradText = (cells["Graduating year"] ?? "").trim();
-    const year = /^\d{4}$/.test(yearText) ? Number(yearText) : Number.NaN;
     const grad = /^\d{4}$/.test(gradText) ? Number(gradText) : Number.NaN;
     const badges: string[] = [];
     if (cells.Status === "LOA") badges.push("LOA");
     return [
       {
-        id: cells["OA id"] || cells["Student ID"] || cells["Alumni ID"] || cells.Name || `${id}-${rowIndex + 2}`,
-        enrollmentYear: Number.isFinite(year) ? year : undefined,
+        id: `${id}-${rowIndex + 2}-${cells["Student ID"] || cells["OA id"] || cells.Name || "row"}`,
+        enrollmentYear: enrollmentYearFromCells(id, cells),
         oaStatus: cells.Stage === "Pending" ? "pending" : cells.Stage === "Applicant" ? "applied" : undefined,
         gradYear: Number.isFinite(grad) ? grad : undefined,
         cells,
@@ -156,6 +317,25 @@ export function payloadFromTable(id: OfficeTabId, title: string, values: string[
       },
     ];
   });
+  if (id === "student-list") {
+    const shaped = studentListKpis(rows);
+    return {
+      id,
+      title,
+      columns,
+      rows,
+      kpis: shaped.kpis,
+      charts: shaped.charts,
+      gaps: rows.length ? [] : [{ label: "Empty tab", detail: `${title} has headers and no data rows.` }],
+      reconciliation: [
+        { label: "Weena (has No.)", count: rows.filter((row) => (row.cells["No."] ?? "").trim()).length },
+        { label: "Rows", count: rows.length },
+      ],
+      mismatches: rows
+        .filter((row) => (row.cells["No."] ?? "").trim() && !(row.cells["OA id"] ?? "").trim())
+        .map((row) => ({ name: row.cells.Name || "Unnamed", issue: "Active in Weena's sheet but no OA record" })),
+    };
+  }
   const category = chartColumn[id] && columns.includes(chartColumn[id]!) ? chartColumn[id]! : columns[0];
   const points = countColumn(rows, category);
   return {
@@ -169,35 +349,77 @@ export function payloadFromTable(id: OfficeTabId, title: string, values: string[
     ],
     charts: [{ id: "mix", title: `${title} by ${category}`, points }],
     gaps: rows.length ? [] : [{ label: "Empty tab", detail: `${title} has headers and no data rows.` }],
-    reconciliation:
-      id === "student-list"
-        ? [{ label: "Rows", count: rows.length }, { label: "With a No.", count: rows.filter((row) => row.cells["No."]).length }]
-        : undefined,
-    mismatches:
-      id === "student-list"
-        ? rows
-            .filter((row) => row.cells["No."] && !row.cells["OA id"])
-            .map((row) => ({ name: row.cells.Name || "Unnamed", issue: "Active in Weena's sheet but no OA record" }))
-        : undefined,
     note: id === "scholarships" ? "Loaded from the master sheet." : undefined,
   };
 }
 
+function sheetHasTable(values: string[][]): boolean {
+  return values.length > 0 && values[0].some((cell) => cell.trim());
+}
+
+function emptyPayload(id: OfficeTabId, title: string): OfficeTabPayload {
+  const columns = [...(masterSheetColumns[title as keyof typeof masterSheetColumns] ?? [])];
+  return { id, title, columns, rows: [], kpis: [], charts: [], gaps: [{ label: "No rows", detail: `${title} was not in the file.` }] };
+}
+
+export function emptyOfficeSnapshot(generatedAt = ""): OfficeSnapshot {
+  const tabs = {} as OfficeSnapshot["tabs"];
+  for (const [title, id] of Object.entries(titleToTab) as [string, OfficeTabId][]) {
+    tabs[id] = emptyPayload(id, title);
+  }
+  return { generatedAt, mock: false, tabs, syncLog: [] };
+}
+
+/** Opens with no roster and no sample tours. Demo is a separate, labeled action. */
+export function initialOfficeSession(): OfficeSession {
+  return {
+    snapshot: emptyOfficeSnapshot(),
+    tours: [],
+    studentListOrigin: "empty",
+    toursOrigin: "empty",
+    studentListLoadedAt: null,
+  };
+}
+
+export function demoOfficeSession(at?: string): OfficeSession {
+  return {
+    snapshot: fictionalSnapshot(at),
+    tours: sampleTours(),
+    studentListOrigin: "demo",
+    toursOrigin: "demo",
+    studentListLoadedAt: null,
+  };
+}
+
+/**
+ * Student List comes only from that sheet tab.
+ * A Snapshot JSON blob, including the fictional sample, never becomes the roster.
+ */
 export function snapshotFromSheets(sheets: Record<string, string[][]>, generatedAt = new Date().toISOString()): OfficeSnapshot | null {
-  const snapshotValues = sheets.Snapshot;
-  if (snapshotValues) {
-    const decoded = decodeSnapshot(snapshotValues);
-    if (decoded) return decoded;
+  const studentValues = sheetByTitle(sheets, "Student List");
+  const studentFromSheet = sheetHasTable(studentValues);
+  const studentPayload = studentFromSheet
+    ? payloadFromTable("student-list", "Student List", studentValues) ?? emptyPayload("student-list", "Student List")
+    : emptyPayload("student-list", "Student List");
+  const decoded = decodeSnapshot(sheetByTitle(sheets, "Snapshot"));
+  if (decoded && !snapshotIsSample(decoded)) {
+    decoded.tabs["student-list"] = studentPayload;
+    return decoded;
   }
   const tabs = {} as OfficeSnapshot["tabs"];
   let found = false;
   for (const [title, id] of Object.entries(titleToTab) as [string, OfficeTabId][]) {
-    const payload = payloadFromTable(id, title, sheets[title] ?? []);
+    if (id === "student-list") {
+      tabs[id] = studentPayload;
+      if (studentPayload.rows.length) found = true;
+      continue;
+    }
+    const payload = payloadFromTable(id, title, sheetByTitle(sheets, title));
     if (payload && payload.rows.length) found = true;
     tabs[id] = payload ?? emptyPayload(id, title);
   }
-  if (!found) return null;
-  const logRows = sheets["Sync Log"]?.slice(1) ?? [];
+  if (!found && !studentFromSheet) return null;
+  const logRows = sheetByTitle(sheets, "Sync Log").slice(1);
   return {
     generatedAt,
     mock: false,
@@ -212,9 +434,67 @@ export function snapshotFromSheets(sheets: Record<string, string[][]>, generated
   };
 }
 
-function emptyPayload(id: OfficeTabId, title: string): OfficeTabPayload {
-  const columns = [...(masterSheetColumns[title as keyof typeof masterSheetColumns] ?? [])];
-  return { id, title, columns, rows: [], kpis: [], charts: [], gaps: [{ label: "No rows", detail: `${title} was not in the file.` }] };
+export function readMasterSheets(sheets: Record<string, string[][]>, generatedAt = new Date().toISOString()): MasterLoad {
+  return {
+    snapshot: snapshotFromSheets(sheets, generatedAt),
+    tours: tourRowsFromSheets(sheets),
+    studentListFromSheet: sheetHasTable(sheetByTitle(sheets, "Student List")),
+  };
+}
+
+/**
+ * Mark Student List live only when that tab was actually read.
+ * Tours-only success must not keep fictional students or label them as the master sheet.
+ * A failed reload keeps the last live roster. It never substitutes the demo names.
+ */
+export function applyMasterLoad(
+  current: OfficeSession,
+  loaded: MasterLoad,
+  at: string,
+  origin: "sheet" | "file" = "sheet",
+): { session: OfficeSession; error: string } {
+  const next: OfficeSession = {
+    snapshot: current.snapshot,
+    tours: current.tours,
+    studentListOrigin: current.studentListOrigin,
+    toursOrigin: current.toursOrigin,
+    studentListLoadedAt: current.studentListLoadedAt,
+  };
+  if (loaded.tours.length) {
+    next.tours = loaded.tours;
+    next.toursOrigin = origin;
+  }
+  const incoming = loaded.snapshot && !snapshotIsSample(loaded.snapshot) ? loaded.snapshot : null;
+  const sheetRows = incoming?.tabs["student-list"]?.rows ?? [];
+  if (loaded.studentListFromSheet && incoming?.tabs["student-list"] && !isFictionalStudentRoster(sheetRows)) {
+    next.snapshot = incoming;
+    next.studentListOrigin = origin;
+    next.studentListLoadedAt = at;
+    return { session: next, error: "" };
+  }
+  const error = loaded.studentListError || (isFictionalStudentRoster(sheetRows)
+    ? "Student List did not load from the master sheet. The fictional sample (Yusuf Demir, Chloe Nguyen, Isla Rahman, Ben Rahman) was not kept."
+    : "Student List did not load from the master sheet.");
+  if (current.studentListOrigin === "sheet" || current.studentListOrigin === "file") {
+    if (incoming) {
+      next.snapshot = {
+        ...incoming,
+        tabs: { ...incoming.tabs, "student-list": current.snapshot.tabs["student-list"] },
+      };
+    }
+    return { session: next, error };
+  }
+  const blank = emptyOfficeSnapshot(at).tabs["student-list"];
+  next.snapshot = incoming
+    ? { ...incoming, tabs: { ...incoming.tabs, "student-list": blank } }
+    : emptyOfficeSnapshot(at);
+  next.studentListOrigin = "empty";
+  next.studentListLoadedAt = null;
+  if (!loaded.tours.length) {
+    next.tours = [];
+    next.toursOrigin = "empty";
+  }
+  return { session: next, error };
 }
 
 export function walkInEventBody(input: { summary: string; description: string; start: string; end: string }) {
