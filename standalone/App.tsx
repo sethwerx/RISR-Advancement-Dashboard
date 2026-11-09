@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { canonicalGrade, filterStudentsByGrade, studentGradeLevels, type StudentGradeLevel } from "@/lib/standalone/grades";
+import { filterStudentsByGrade } from "@/lib/standalone/grades";
 import { dashboardTabs, syncControlLabel } from "@/lib/standalone/tabs";
 import { walkInFormFields } from "@/tabs/tours/walkinForm.config";
 import { defaultYearForTab, rowInYear, yearOptions } from "@/lib/office/year";
@@ -37,6 +37,7 @@ import {
   webhookStorageKey,
   type SyncSchedule,
 } from "@/lib/standalone/sync-webhook";
+import { currentStudentListYear, gradeButtonsForRows, missingStudentListMessage, studentListSchoolYears, type StudentListByYear, type StudentListSchoolYear } from "@/lib/standalone/student-years";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
 
 export function App() {
@@ -48,13 +49,14 @@ export function App() {
   const [studentListOrigin, setStudentListOrigin] = useState<DatasetOrigin>("empty");
   const [toursOrigin, setToursOrigin] = useState<DatasetOrigin>("empty");
   const [studentListLoadedAt, setStudentListLoadedAt] = useState<string | null>(null);
+  const [studentListsByYear, setStudentListsByYear] = useState<StudentListByYear>(() => initialOfficeSession().studentListsByYear);
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [reloadState, setReloadState] = useState<"idle" | "loading">("idle");
   const sessionRef = useRef<OfficeSession>(initialOfficeSession());
-  sessionRef.current = { snapshot, tours, studentListOrigin, toursOrigin, studentListLoadedAt };
+  sessionRef.current = { snapshot, tours, studentListOrigin, toursOrigin, studentListLoadedAt, studentListsByYear };
   const [selectedTour, setSelectedTour] = useState<LocalTour | null>(null);
   const [selectedRow, setSelectedRow] = useState<OfficeRow | null>(null);
   const [walkIn, setWalkIn] = useState(false);
@@ -70,6 +72,7 @@ export function App() {
     setStudentListOrigin(session.studentListOrigin);
     setToursOrigin(session.toursOrigin);
     setStudentListLoadedAt(session.studentListLoadedAt);
+    setStudentListsByYear(session.studentListsByYear);
   }
 
   function showDemo() {
@@ -137,6 +140,7 @@ export function App() {
             setToursOrigin("empty");
             setStudentListOrigin("file");
             setStudentListLoadedAt(loadedAt);
+            setStudentListsByYear(initialOfficeSession().studentListsByYear);
             setMessage(`Loaded ${file.name}.`);
           }
         } else if (parsed.snapshot && typeof parsed.snapshot === "object") {
@@ -389,6 +393,7 @@ export function App() {
             snapshot={snapshot}
             studentListOrigin={studentListOrigin}
             studentListLoadedAt={studentListLoadedAt}
+            studentListsByYear={studentListsByYear}
             syncing={syncState === "loading"}
             reloading={reloadState === "loading"}
             onSync={() => void syncNow()}
@@ -522,17 +527,27 @@ function ToursPanel({ tours, toursOrigin, logo, syncing, onSync, onNoShow, onOpe
   );
 }
 
-function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, syncing, reloading, onSync, onReload, onOpen, onChart }: { tab: OfficeTabId; snapshot: OfficeSnapshot; studentListOrigin: DatasetOrigin; studentListLoadedAt: string | null; syncing: boolean; reloading: boolean; onSync: () => void; onReload: () => void; onOpen: (row: OfficeRow) => void; onChart: (chart: OfficeChart) => void }) {
+function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, studentListsByYear, syncing, reloading, onSync, onReload, onOpen, onChart }: { tab: OfficeTabId; snapshot: OfficeSnapshot; studentListOrigin: DatasetOrigin; studentListLoadedAt: string | null; studentListsByYear: StudentListByYear; syncing: boolean; reloading: boolean; onSync: () => void; onReload: () => void; onOpen: (row: OfficeRow) => void; onChart: (chart: OfficeChart) => void }) {
   const raw = snapshot.tabs[tab];
-  const payload = tab === "student-list" ? presentStudentList(raw, studentListOrigin) : raw;
+  const [schoolYear, setSchoolYear] = useState<StudentListSchoolYear>(currentStudentListYear);
+  const selectedList = tab === "student-list" && schoolYear !== currentStudentListYear ? studentListsByYear[schoolYear] : null;
+  const payload = tab !== "student-list"
+    ? raw
+    : schoolYear === currentStudentListYear
+      ? presentStudentList(raw, studentListOrigin)
+      : selectedList && studentListOrigin !== "empty"
+        ? selectedList
+        : { ...raw, title: `Student List ${schoolYear}`, rows: [], kpis: [{ id: "rows", label: "Rows", value: "0", chartId: "by-grade" }], charts: [], gaps: [], reconciliation: undefined, mismatches: undefined, note: missingStudentListMessage(schoolYear) };
+  const yearMissing = tab === "student-list" && studentListOrigin !== "empty" && payload.rows.length === 0 && (schoolYear !== currentStudentListYear || studentListOrigin === "sheet" || studentListOrigin === "file");
   const [year, setYear] = useState(() => defaultYearForTab(tab));
   const [query, setQuery] = useState("");
-  const [grade, setGrade] = useState<"all" | StudentGradeLevel>("all");
+  const [grade, setGrade] = useState("all");
   const [sort, setSort] = useState<{ column: string; dir: "asc" | "desc" } | null>(null);
   useEffect(() => {
     setYear(defaultYearForTab(tab));
     setGrade("all");
     setQuery("");
+    setSchoolYear(currentStudentListYear);
   }, [tab]);
   const rows = useMemo(() => {
     const byYear = payload.rows.filter((row) => rowInYear(row, year, tab)).filter((row) => Object.values(row.cells).join(" ").toLowerCase().includes(query.trim().toLowerCase()));
@@ -547,11 +562,12 @@ function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, sy
     <section>
       <div className="page-head">
         <div>
-          <h2>{payload.title}</h2>
+          <h2>{tab === "student-list" ? `Student List ${schoolYear}` : payload.title}</h2>
           {tab === "student-list" && studentListOrigin === "empty" ? <p className="signin-banner" role="status">{signInStudentListMessage}</p> : null}
-          {tab === "student-list" && studentListOrigin === "demo" ? <p className="sample-banner" role="status">{demoStudentListBanner}</p> : null}
-          {tab === "student-list" && (studentListOrigin === "sheet" || studentListOrigin === "file") ? <p className="lede">Student ID is Weena’s ID No. from STUDENT LIST SY2026-2027. OpenApply’s Student ID is not the ID of record. OA id is the matched OpenApply record, when there is one. Sync refreshes Weena and OpenApply through the bot. Reload data reads the master sheet again.</p> : null}
-          {tab === "student-list" ? <p className="lede" data-student-source={studentListOrigin}>Source: {studentListSourceLabel(studentListOrigin)} · Rows: {payload.rows.length} · Last loaded: {formatLoadedAt(studentListLoadedAt)}</p> : null}
+          {tab === "student-list" && studentListOrigin === "demo" && schoolYear === currentStudentListYear ? <p className="sample-banner" role="status">{demoStudentListBanner}</p> : null}
+          {tab === "student-list" && schoolYear === currentStudentListYear && (studentListOrigin === "sheet" || studentListOrigin === "file") ? <p className="lede">Student ID is Weena’s ID No. from STUDENT LIST SY2026-2027. OpenApply’s Student ID is not the ID of record. OA id is the matched OpenApply record, when there is one. Sync refreshes Weena and OpenApply through the bot. Reload data reads the master sheet again.</p> : null}
+          {tab === "student-list" && schoolYear !== currentStudentListYear && studentListOrigin !== "empty" ? <p className="lede">This list is the master sheet tab Student List {schoolYear}. Past years show the sheet as stored. OpenApply is not merged again here.</p> : null}
+          {tab === "student-list" ? <p className="lede" data-student-source={studentListOrigin} data-school-year={schoolYear}>Source: {studentListSourceLabel(studentListOrigin)} · {schoolYear} · Rows: {payload.rows.length} · Last loaded: {formatLoadedAt(studentListLoadedAt)}</p> : null}
           {payload.note && tab !== "student-list" ? <p className="lede">{payload.note}</p> : null}
         </div>
         <div className="header-actions">
@@ -560,11 +576,21 @@ function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, sy
         </div>
       </div>
       {tab === "student-list" ? (
+        <div className="grade-bar" role="toolbar" aria-label="School years">
+          {studentListSchoolYears.map((level) => (
+            <button key={level} type="button" className={schoolYear === level ? "btn primary" : "btn"} onClick={() => { setSchoolYear(level); setGrade("all"); }}>
+              {level}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {yearMissing ? <div className="card" role="status"><h3>{missingStudentListMessage(schoolYear)}</h3></div> : null}
+      {tab === "student-list" && payload.rows.length ? (
         <div className="grade-bar" role="toolbar" aria-label="Grade levels">
           <button type="button" className={grade === "all" ? "btn primary" : "btn"} onClick={() => setGrade("all")}>All</button>
-          {studentGradeLevels.map((level) => (
+          {gradeButtonsForRows(payload.rows).map((level) => (
             <button key={level} type="button" className={grade === level ? "btn primary" : "btn"} onClick={() => setGrade(level)}>
-              {level} ({payload.rows.filter((row) => canonicalGrade(row.cells.Grade || "") === level).length})
+              {level} ({filterStudentsByGrade(payload.rows, level).length})
             </button>
           ))}
         </div>
@@ -577,7 +603,7 @@ function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, sy
         ))}
       </div>
       <div className="toolbar">
-        <label>Year <select value={year} onChange={(event) => setYear(event.target.value)}>{yearOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All years" : option}</option>)}</select></label>
+        {tab === "student-list" ? null : <label>Year <select value={year} onChange={(event) => setYear(event.target.value)}>{yearOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All years" : option}</option>)}</select></label>}
         <label>Search <input value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       </div>
       {payload.reconciliation ? <div className="card"><h3>Reconciliation</h3><p>{payload.reconciliation.map((item) => `${item.label}: ${item.count}`).join(" · ")}</p>{payload.mismatches?.length ? <ul>{payload.mismatches.map((item) => <li key={`${item.name}-${item.issue}`}>{item.name}: {item.issue}</li>)}</ul> : null}</div> : null}

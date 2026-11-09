@@ -3,6 +3,14 @@ import { fictionalSnapshot } from "@/lib/office/sample";
 import { decodeSnapshot } from "@/lib/office/snapshot-json";
 import type { OfficeChart, OfficeKpi, OfficeRow, OfficeSnapshot, OfficeTabId, OfficeTabPayload } from "@/lib/office/types";
 import { withNoShowTag } from "@/lib/title";
+import {
+  currentStudentListYear,
+  emptyStudentListsByYear,
+  studentListSchoolYears,
+  studentListTabNames,
+  type StudentListByYear,
+  type StudentListSchoolYear,
+} from "@/lib/standalone/student-years";
 
 export type LocalTour = {
   id: string;
@@ -133,6 +141,7 @@ export type OfficeSession = {
   studentListOrigin: DatasetOrigin;
   toursOrigin: DatasetOrigin;
   studentListLoadedAt: string | null;
+  studentListsByYear: StudentListByYear;
 };
 
 export type MasterLoad = {
@@ -140,6 +149,7 @@ export type MasterLoad = {
   tours: LocalTour[];
   studentListFromSheet: boolean;
   studentListError?: string;
+  studentListsByYear?: StudentListByYear;
 };
 
 const fictionalStudentNames = ["Ben Rahman", "Chloe Nguyen", "Isla Rahman", "Yusuf Demir"];
@@ -243,6 +253,31 @@ function sheetByTitle(sheets: Record<string, string[][]>, title: string): string
   if (direct && direct.length) return direct;
   const key = Object.keys(sheets).find((name) => name.trim().toLowerCase() === title.trim().toLowerCase());
   return key ? sheets[key] ?? [] : [];
+}
+
+function tableHasData(values: string[][]): boolean {
+  return values.length > 1 && values.slice(1).some((row) => row.some((cell) => cell?.trim()));
+}
+
+/** Current roster: "Student List" when it has rows, otherwise the optional "Student List 2026-2027" alias. */
+export function currentStudentListValues(sheets: Record<string, string[][]>): string[][] {
+  const named = studentListTabNames(currentStudentListYear).map((title) => sheetByTitle(sheets, title));
+  return named.find(tableHasData) ?? named.find(sheetHasTable) ?? [];
+}
+
+function studentListForYear(sheets: Record<string, string[][]>, year: StudentListSchoolYear): OfficeTabPayload | null {
+  const values = year === currentStudentListYear ? currentStudentListValues(sheets) : sheetByTitle(sheets, studentListTabNames(year)[0]);
+  if (!tableHasData(values)) return null;
+  const payload = payloadFromTable("student-list", year === currentStudentListYear ? "Student List" : `Student List ${year}`, values);
+  if (!payload || !payload.rows.length) return null;
+  if (year === currentStudentListYear) return payload;
+  return { ...payload, mismatches: undefined, reconciliation: undefined };
+}
+
+export function readStudentListsByYear(sheets: Record<string, string[][]>): StudentListByYear {
+  const lists = emptyStudentListsByYear();
+  for (const year of studentListSchoolYears) lists[year] = studentListForYear(sheets, year);
+  return lists;
 }
 
 /** Student List has no enrollment-year column. A Start date must not become one. */
@@ -378,6 +413,7 @@ export function initialOfficeSession(): OfficeSession {
     studentListOrigin: "empty",
     toursOrigin: "empty",
     studentListLoadedAt: null,
+    studentListsByYear: emptyStudentListsByYear(),
   };
 }
 
@@ -388,6 +424,7 @@ export function demoOfficeSession(at?: string): OfficeSession {
     studentListOrigin: "demo",
     toursOrigin: "demo",
     studentListLoadedAt: null,
+    studentListsByYear: emptyStudentListsByYear(),
   };
 }
 
@@ -396,7 +433,7 @@ export function demoOfficeSession(at?: string): OfficeSession {
  * A Snapshot JSON blob, including the fictional sample, never becomes the roster.
  */
 export function snapshotFromSheets(sheets: Record<string, string[][]>, generatedAt = new Date().toISOString()): OfficeSnapshot | null {
-  const studentValues = sheetByTitle(sheets, "Student List");
+  const studentValues = currentStudentListValues(sheets);
   const studentFromSheet = sheetHasTable(studentValues);
   const studentPayload = studentFromSheet
     ? payloadFromTable("student-list", "Student List", studentValues) ?? emptyPayload("student-list", "Student List")
@@ -435,10 +472,14 @@ export function snapshotFromSheets(sheets: Record<string, string[][]>, generated
 }
 
 export function readMasterSheets(sheets: Record<string, string[][]>, generatedAt = new Date().toISOString()): MasterLoad {
+  const studentListsByYear = readStudentListsByYear(sheets);
+  const snapshot = snapshotFromSheets(sheets, generatedAt);
+  if (snapshot?.tabs["student-list"]?.rows.length) studentListsByYear[currentStudentListYear] = snapshot.tabs["student-list"];
   return {
-    snapshot: snapshotFromSheets(sheets, generatedAt),
+    snapshot,
     tours: tourRowsFromSheets(sheets),
-    studentListFromSheet: sheetHasTable(sheetByTitle(sheets, "Student List")),
+    studentListFromSheet: sheetHasTable(currentStudentListValues(sheets)),
+    studentListsByYear,
   };
 }
 
@@ -459,6 +500,7 @@ export function applyMasterLoad(
     studentListOrigin: current.studentListOrigin,
     toursOrigin: current.toursOrigin,
     studentListLoadedAt: current.studentListLoadedAt,
+    studentListsByYear: current.studentListsByYear,
   };
   if (loaded.tours.length) {
     next.tours = loaded.tours;
@@ -470,6 +512,7 @@ export function applyMasterLoad(
     next.snapshot = incoming;
     next.studentListOrigin = origin;
     next.studentListLoadedAt = at;
+    next.studentListsByYear = { ...emptyStudentListsByYear(), ...(loaded.studentListsByYear ?? {}), [currentStudentListYear]: incoming.tabs["student-list"] };
     return { session: next, error: "" };
   }
   const error = loaded.studentListError || (isFictionalStudentRoster(sheetRows)
@@ -490,6 +533,7 @@ export function applyMasterLoad(
     : emptyOfficeSnapshot(at);
   next.studentListOrigin = "empty";
   next.studentListLoadedAt = null;
+  next.studentListsByYear = emptyStudentListsByYear();
   if (!loaded.tours.length) {
     next.tours = [];
     next.toursOrigin = "empty";

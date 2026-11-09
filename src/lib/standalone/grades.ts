@@ -38,8 +38,9 @@ export function canonicalGrade(value: string): string {
   return "";
 }
 
-export function filterStudentsByGrade(rows: OfficeRow[], grade: "all" | StudentGradeLevel): OfficeRow[] {
+export function filterStudentsByGrade(rows: OfficeRow[], grade: "all" | string): OfficeRow[] {
   if (grade === "all") return rows;
   const selected = canonicalGrade(grade);
-  return rows.filter((row) => canonicalGrade(row.cells.Grade || "") === selected);
+  if (selected) return rows.filter((row) => canonicalGrade(row.cells.Grade || "") === selected);
+  return rows.filter((row) => (row.cells.Grade || "").trim() === grade);
 }

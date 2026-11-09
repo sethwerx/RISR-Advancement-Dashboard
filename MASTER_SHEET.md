@@ -50,6 +50,8 @@ The tab title is `Tours`. `Tours/Visits` is accepted as the same tab. Columns ar
 
 `No.` is Weena's row number. A filled `No.` means active. `Status` `LOA` stays on the list. `Student ID` is Weena's ID No. from STUDENT LIST SY2026-2027 (`156hsISrGNmL2Q-90BsEwhhZ0n6kWwdcZ_Dp15JVXl6A`). Do not put OpenApply's Student ID field in this column. `OA id` is the matched OpenApply record when one exists, and is blank when it does not. A row with `No.` and a blank `OA id` is the mismatch "Active in Weena's sheet but no OA record". `Grade` must be one of Weena's exact values: `Pre K 2`, `Pre K 3`, `Pre K 4`, `KG`, `Gr 1`, `Gr 2`, `Gr 3`, `Gr 4`, `Gr 5`, `Gr 6`, `Gr 7`, `Gr 8`, `Gr 9`, `Gr 10`, `Gr 11`, `Gr 12`. The grade buttons use those strings. `DOB` is `YYYY-MM-DD`. The weekday job and Sync Now refresh this tab through the bot webhook. The HTML file only reads the master sheet.
 
+The current year is the tab named `Student List` (school year 2026-2027). `Student List 2026-2027` is an optional alias for that same year. Past years are separate tabs with the same columns: `Student List 2025-2026`, `Student List 2024-2025`, `Student List 2023-2024`, `Student List 2022-2023`, `Student List 2021-2022`, `Student List 2020-2021`, and `Student List 2019-2020`. A missing past-year tab, or a tab with only a header row, is an empty year in the app. It does not block the other tabs. Older years may leave columns blank. OpenApply matching stays on the current `Student List` tab.
+
 ## Withdrawals
 
 `Student ID`, `OA id`, `Name`, `Grade`, `Notified`, `Last day`, `Form signed`, `Reason`, `Category`, `Checklist`, `OA withdrawn`

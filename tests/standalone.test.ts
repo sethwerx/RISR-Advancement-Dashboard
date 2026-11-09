@@ -4,6 +4,7 @@ import { defaultYearForTab, rowInYear } from "@/lib/office/year";
 import { masterSheetColumns } from "@/lib/office/sheet-schema";
 import { applyMasterLoad, calendarWriteQuery, demoOfficeSession, initialOfficeSession, isFictionalStudentRoster, noShowPatch, payloadFromTable, presentStudentList, readMasterSheets, signInStudentListMessage, snapshotFromSheets, studentListReadError, tourRowsFromSheets, toursFromSheet, walkInEventBody } from "@/lib/standalone/data";
 import { canonicalGrade, filterStudentsByGrade, studentGradeLevels } from "@/lib/standalone/grades";
+import { currentStudentListYear, gradeButtonsForRows, missingStudentListMessage, studentListSchoolYears, studentListTabIsRequired } from "@/lib/standalone/student-years";
 import { dashboardTabs, syncControlLabel } from "@/lib/standalone/tabs";
 import { describeSyncSchedule, latestSyncAt, normalizeWebhookUrl, parseSyncSchedule, syncLogAdvanced, syncWebhookBody } from "@/lib/standalone/sync-webhook";
 import type { OfficeRow } from "@/lib/office/types";
@@ -228,6 +229,67 @@ describe("student list grades", () => {
     expect(aliased?.rows[0].enrollmentYear).toBeUndefined();
     expect(filterStudentsByGrade(aliased?.rows ?? [], "Gr 1")).toHaveLength(1);
     expect(snapshotFromSheets({ Snapshot: [["snapshot-v1"], [JSON.stringify(fictionalSnapshot())]] })?.tabs["student-list"].rows ?? []).toEqual([]);
+  });
+});
+
+describe("student list school years", () => {
+  const headers = [...masterSheetColumns["Student List"]];
+  const listRow = (name: string, grade: string, id: string, oa = "") => [name === "Loa Child" ? "" : "1", id, oa, name, grade, "", "", "", "", "1 Aug 2024", name === "Loa Child" ? "LOA" : "Active", "", ""];
+
+  it("lists 2019-2020 through 2026-2027 newest first and switches years", () => {
+    expect([...studentListSchoolYears]).toEqual([
+      "2026-2027",
+      "2025-2026",
+      "2024-2025",
+      "2023-2024",
+      "2022-2023",
+      "2021-2022",
+      "2020-2021",
+      "2019-2020",
+    ]);
+    expect(currentStudentListYear).toBe("2026-2027");
+    expect(studentListTabIsRequired("Student List")).toBe(true);
+    expect(studentListTabIsRequired("Student List 2019-2020")).toBe(false);
+    expect(studentListTabIsRequired("Student List 2026-2027")).toBe(false);
+    expect(missingStudentListMessage("2019-2020")).toBe("No student list found for 2019-2020 yet");
+
+    const loaded = readMasterSheets({
+      "Student List": [headers, listRow("Merged Current", "Gr 2", "30001", "91")],
+      "Student List 2026-2027": [headers, listRow("Alias Copy", "Gr 9", "30002")],
+      "Student List 2024-2025": [headers, listRow("Past Child", "Pre K 2", "24001"), listRow("Past Two", "G1", "24002")],
+      "Student List 2019-2020": [headers],
+      Applicants: [["Name"], ["Still here"]],
+    });
+    expect(loaded.studentListFromSheet).toBe(true);
+    expect(loaded.snapshot?.tabs["student-list"].rows.map((row) => row.cells.Name)).toEqual(["Merged Current"]);
+    expect(loaded.snapshot?.tabs["student-list"].mismatches).toEqual([]);
+    const years = loaded.studentListsByYear;
+    expect(years?.["2026-2027"]?.rows.map((row) => row.cells.Name)).toEqual(["Merged Current"]);
+    expect(years?.["2024-2025"]?.rows.map((row) => row.cells.Name)).toEqual(["Past Child", "Past Two"]);
+    expect(years?.["2024-2025"]?.mismatches).toBeUndefined();
+    expect(years?.["2019-2020"]).toBeNull();
+    expect(years?.["2020-2021"]).toBeNull();
+    expect(loaded.snapshot?.tabs.applicants.rows[0].cells.Name).toBe("Still here");
+    const past = years?.["2024-2025"]?.rows ?? [];
+    expect(gradeButtonsForRows(past)).toEqual(["Pre K 2", "Gr 1"]);
+    expect(filterStudentsByGrade(past, "Pre K 2").map((row) => row.cells.Name)).toEqual(["Past Child"]);
+    expect(filterStudentsByGrade(past, "Gr 1").map((row) => row.cells.Name)).toEqual(["Past Two"]);
+    expect(filterStudentsByGrade(past, "Gr 5")).toEqual([]);
+
+    const aliasOnly = readMasterSheets({
+      "Student List 2026-2027": [headers, listRow("Alias Current", "KG", "26001", "77")],
+      "Student List 2025-2026": [headers, listRow("Last Year", "Gr 12", "25001")],
+    });
+    expect(aliasOnly.studentListFromSheet).toBe(true);
+    expect(aliasOnly.snapshot?.tabs["student-list"].rows[0].cells.Name).toBe("Alias Current");
+    expect(aliasOnly.studentListsByYear?.["2025-2026"]?.rows[0].cells.Name).toBe("Last Year");
+    expect(aliasOnly.studentListsByYear?.["2019-2020"]).toBeNull();
+    const applied = applyMasterLoad(initialOfficeSession(), aliasOnly, "2026-11-09T03:00:00.000Z");
+    expect(applied.error).toBe("");
+    expect(applied.session.studentListOrigin).toBe("sheet");
+    expect(applied.session.studentListsByYear["2026-2027"]?.rows[0].cells.Name).toBe("Alias Current");
+    expect(applied.session.studentListsByYear["2025-2026"]?.rows[0].cells.Name).toBe("Last Year");
+    expect(applied.session.snapshot.tabs.applicants.rows).toEqual([]);
   });
 });
 
