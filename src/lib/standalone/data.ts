@@ -19,6 +19,7 @@ import {
   type YearTabId,
 } from "@/lib/standalone/school-years";
 import { alumniSheetTitles } from "@/lib/standalone/alumni-classes";
+import { emptyScheduleBundle, readScheduleBundle, type ScheduleBundle } from "@/lib/standalone/schedule";
 
 export type LocalTour = {
   id: string;
@@ -151,6 +152,7 @@ export type OfficeSession = {
   studentListLoadedAt: string | null;
   studentListsByYear: StudentListByYear;
   yearArchives: YearArchives;
+  schedule: ScheduleBundle;
 };
 
 export type MasterLoad = {
@@ -160,6 +162,7 @@ export type MasterLoad = {
   studentListError?: string;
   studentListsByYear?: StudentListByYear;
   yearArchives?: YearArchives;
+  schedule?: ScheduleBundle;
 };
 
 const fictionalStudentNames = ["Ben Rahman", "Chloe Nguyen", "Isla Rahman", "Yusuf Demir"];
@@ -446,6 +449,7 @@ export function initialOfficeSession(): OfficeSession {
     studentListLoadedAt: null,
     studentListsByYear: emptyStudentListsByYear(),
     yearArchives: emptyYearArchives(),
+    schedule: emptyScheduleBundle(),
   };
 }
 
@@ -458,6 +462,7 @@ export function demoOfficeSession(at?: string): OfficeSession {
     studentListLoadedAt: null,
     studentListsByYear: emptyStudentListsByYear(),
     yearArchives: emptyYearArchives(),
+    schedule: emptyScheduleBundle(),
   };
 }
 
@@ -539,6 +544,7 @@ export function readMasterSheets(sheets: Record<string, string[][]>, generatedAt
     studentListFromSheet: sheetHasTable(currentStudentListValues(sheets)),
     studentListsByYear: yearArchives["student-list"],
     yearArchives,
+    schedule: readScheduleBundle(sheets),
   };
 }
 
@@ -561,7 +567,9 @@ export function applyMasterLoad(
     studentListLoadedAt: current.studentListLoadedAt,
     studentListsByYear: current.studentListsByYear,
     yearArchives: current.yearArchives,
+    schedule: current.schedule,
   };
+  if (loaded.schedule) next.schedule = loaded.schedule;
   if (loaded.tours.length) {
     next.tours = loaded.tours;
     next.toursOrigin = origin;

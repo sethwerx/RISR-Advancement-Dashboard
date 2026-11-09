@@ -7,6 +7,7 @@ export const dashboardTabs = [
   { id: "canceled-declined", label: "Canceled/Declined", enabled: true },
   { id: "offers", label: "Offers", enabled: true },
   { id: "student-list", label: "Student List", enabled: true },
+  { id: "new-students", label: "New Students", enabled: true },
   { id: "withdrawals", label: "Withdrawals", enabled: true },
   { id: "alumni", label: "Alumni", enabled: true },
   { id: "scholarships", label: "Scholarships", enabled: true },

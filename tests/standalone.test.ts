@@ -382,6 +382,7 @@ describe("per-tab sync", () => {
       "Canceled/Declined",
       "Offers",
       "Student List",
+      "New Students",
       "Withdrawals",
       "Alumni",
       "Scholarships",

@@ -41,6 +41,8 @@ import {
 import { gradeButtonsForRows } from "@/lib/standalone/student-years";
 import { currentSchoolYear, missingYearMessage, yearTabSection, type SchoolYear, type YearArchives } from "@/lib/standalone/school-years";
 import { SchoolYearBar } from "./SchoolYearBar";
+import { AssessmentsPanel, NewStudentsPanel } from "./SchedulePanels";
+import { emptyScheduleBundle, type ScheduleBundle } from "@/lib/standalone/schedule";
 import { alumniClasses, alumniColumnLabel, defaultAlumniClassYear, filterAlumniByClass, missingAlumniClassMessage, type AlumniClassYear } from "@/lib/standalone/alumni-classes";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
 
@@ -55,13 +57,14 @@ export function App() {
   const [studentListLoadedAt, setStudentListLoadedAt] = useState<string | null>(null);
   const [studentListsByYear, setStudentListsByYear] = useState(() => initialOfficeSession().studentListsByYear);
   const [yearArchives, setYearArchives] = useState<YearArchives>(() => initialOfficeSession().yearArchives);
+  const [sheetSchedule, setSheetSchedule] = useState<ScheduleBundle>(() => initialOfficeSession().schedule);
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [reloadState, setReloadState] = useState<"idle" | "loading">("idle");
   const sessionRef = useRef<OfficeSession>(initialOfficeSession());
-  sessionRef.current = { snapshot, tours, studentListOrigin, toursOrigin, studentListLoadedAt, studentListsByYear, yearArchives };
+  sessionRef.current = { snapshot, tours, studentListOrigin, toursOrigin, studentListLoadedAt, studentListsByYear, yearArchives, schedule: sheetSchedule };
   const [selectedTour, setSelectedTour] = useState<LocalTour | null>(null);
   const [selectedRow, setSelectedRow] = useState<OfficeRow | null>(null);
   const [walkIn, setWalkIn] = useState(false);
@@ -79,6 +82,7 @@ export function App() {
     setStudentListLoadedAt(session.studentListLoadedAt);
     setStudentListsByYear(session.studentListsByYear);
     setYearArchives(session.yearArchives);
+    setSheetSchedule(session.schedule ?? emptyScheduleBundle());
   }
 
   function showDemo() {
@@ -148,6 +152,7 @@ export function App() {
             setStudentListLoadedAt(loadedAt);
             setStudentListsByYear(initialOfficeSession().studentListsByYear);
             setYearArchives(initialOfficeSession().yearArchives);
+            setSheetSchedule(emptyScheduleBundle());
             setMessage(`Loaded ${file.name}.`);
           }
         } else if (parsed.snapshot && typeof parsed.snapshot === "object") {
@@ -394,6 +399,10 @@ export function App() {
             onWalkIn={() => setWalkIn(true)}
             onChart={() => setChart({ id: "attendance", title: "Tour attendance", points: attendancePoints(tours) })}
           />
+        ) : tab === "assessments" ? (
+          <AssessmentsPanel schedule={sheetSchedule} today={todayIct()} syncing={syncState === "loading"} onSync={() => void syncNow()} />
+        ) : tab === "new-students" ? (
+          <NewStudentsPanel schedule={sheetSchedule} syncing={syncState === "loading"} onSync={() => void syncNow()} />
         ) : dashboardTabs.find((item) => item.id === tab)?.enabled ? (
           <OfficePanel
             tab={tab as OfficeTabId}
@@ -609,7 +618,7 @@ function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, ye
           <SyncTabButton busy={syncing} onSync={onSync} />
         </div>
       </div>
-      {section ? <SchoolYearBar year={schoolYear} onChange={(level) => { setSchoolYear(level); setGrade("all"); }} /> : null}
+      {section ? <SchoolYearBar year={schoolYear} onChange={(level) => { setSchoolYear(level as SchoolYear); setGrade("all"); }} /> : null}
       {tab === "alumni" ? (
         <div className="grade-bar" role="toolbar" aria-label="Graduating classes">
           <button type="button" className={alumniClass === "all" ? "btn primary" : "btn"} onClick={() => setAlumniClass("all")}>All</button>

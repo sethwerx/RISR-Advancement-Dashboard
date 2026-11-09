@@ -1,9 +1,9 @@
-import { currentSchoolYear, schoolYears, type SchoolYear } from "@/lib/standalone/school-years";
+import { currentSchoolYear, schoolYears } from "@/lib/standalone/school-years";
 
-export function SchoolYearBar({ year, onChange }: { year: SchoolYear; onChange: (year: SchoolYear) => void }) {
+export function SchoolYearBar({ years = schoolYears, year, onChange }: { years?: readonly string[]; year: string; onChange: (year: string) => void }) {
   return (
     <div className="grade-bar" role="toolbar" aria-label="School years">
-      {schoolYears.map((level) => (
+      {years.map((level) => (
         <button key={level} type="button" className={year === level ? "btn primary" : "btn"} aria-pressed={year === level} onClick={() => onChange(level)}>
           {level}
         </button>

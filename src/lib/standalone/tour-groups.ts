@@ -7,7 +7,7 @@ export type TourDayGroup = {
   tours: LocalTour[];
 };
 
-function dayHeading(date: string): string {
+export function formatDayHeading(date: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date || "Date not recorded";
   const [year, month, day] = date.split("-").map(Number);
   return new Intl.DateTimeFormat("en-GB", {
@@ -33,7 +33,7 @@ function groupsFrom(map: Map<string, LocalTour[]>, descending: boolean): TourDay
     .sort((left, right) => (descending ? right[0].localeCompare(left[0]) : left[0].localeCompare(right[0])))
     .map(([date, dayTours]) => ({
       date,
-      heading: dayHeading(date),
+      heading: formatDayHeading(date),
       tours: [...dayTours].sort((left, right) => minutes(left.time) - minutes(right.time) || left.students.localeCompare(right.students)),
     }));
 }
