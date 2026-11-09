@@ -5,6 +5,7 @@ import { masterSheetColumns } from "@/lib/office/sheet-schema";
 import { applyMasterLoad, calendarWriteQuery, demoOfficeSession, initialOfficeSession, isFictionalStudentRoster, noShowPatch, payloadFromTable, presentStudentList, readMasterSheets, signInStudentListMessage, snapshotFromSheets, studentListReadError, tourRowsFromSheets, toursFromSheet, walkInEventBody } from "@/lib/standalone/data";
 import { canonicalGrade, filterStudentsByGrade, studentGradeLevels } from "@/lib/standalone/grades";
 import { currentStudentListYear, gradeButtonsForRows, missingStudentListMessage, studentListSchoolYears, studentListTabIsRequired } from "@/lib/standalone/student-years";
+import { missingYearMessage, optionalYearTabTitles, yearTabIsRequired, yearTabSections } from "@/lib/standalone/school-years";
 import { dashboardTabs, syncControlLabel } from "@/lib/standalone/tabs";
 import { describeSyncSchedule, latestSyncAt, normalizeWebhookUrl, parseSyncSchedule, syncLogAdvanced, syncWebhookBody } from "@/lib/standalone/sync-webhook";
 import type { OfficeRow } from "@/lib/office/types";
@@ -290,6 +291,47 @@ describe("student list school years", () => {
     expect(applied.session.studentListsByYear["2026-2027"]?.rows[0].cells.Name).toBe("Alias Current");
     expect(applied.session.studentListsByYear["2025-2026"]?.rows[0].cells.Name).toBe("Last Year");
     expect(applied.session.snapshot.tabs.applicants.rows).toEqual([]);
+  });
+});
+
+describe("withdrawal school years", () => {
+  const headers = [...masterSheetColumns.Withdrawals];
+  const row = (name: string, category: string) => ["10001", "", name, "Gr 4", "2024-01-01", "2024-01-15", "", "Moving", category, "", ""];
+
+  it("switches years and leaves a missing withdrawals tab empty", () => {
+    expect(yearTabSections.map((section) => section.id)).toEqual(["student-list", "withdrawals"]);
+    expect(missingYearMessage("withdrawals", "2019-2020")).toBe("No withdrawals found for 2019-2020 yet");
+    expect(yearTabIsRequired("Withdrawals")).toBe(false);
+    expect(yearTabIsRequired("Withdrawals 2019-2020")).toBe(false);
+    expect(optionalYearTabTitles()).toEqual(expect.arrayContaining(["Withdrawals 2026-2027", "Withdrawals 2019-2020", "Student List 2025-2026"]));
+
+    const loaded = readMasterSheets({
+      "Student List": [[...masterSheetColumns["Student List"]], ["1", "9", "1", "Roster", "Gr 1", "", "", "", "", "", "Active", "", ""]],
+      Withdrawals: [headers, row("Current Child", "Other School"), row("Second Child", "Not stated")],
+      "Withdrawals 2026-2027": [headers, row("Alias Copy", "Other")],
+      "Withdrawals 2024-2025": [headers, row("Past Child", "Leaving Thailand")],
+      "Withdrawals 2019-2020": [headers],
+    });
+    expect(loaded.studentListFromSheet).toBe(true);
+    expect(loaded.snapshot?.tabs.withdrawals.rows.map((item) => item.cells.Name)).toEqual(["Current Child", "Second Child"]);
+    expect(loaded.yearArchives?.withdrawals["2026-2027"]?.rows).toHaveLength(2);
+    expect(loaded.yearArchives?.withdrawals["2026-2027"]?.kpis.find((item) => item.id === "rows")?.value).toBe("2");
+    const past = loaded.yearArchives?.withdrawals["2024-2025"];
+    expect(past?.rows.map((item) => item.cells.Name)).toEqual(["Past Child"]);
+    expect(past?.charts[0]?.points.find((point) => point.label === "Leaving Thailand")?.value).toBe(1);
+    expect(loaded.yearArchives?.withdrawals["2019-2020"]).toBeNull();
+    expect(loaded.yearArchives?.withdrawals["2020-2021"]).toBeNull();
+    const applied = applyMasterLoad(initialOfficeSession(), loaded, "2026-11-09T04:00:00.000Z");
+    expect(applied.error).toBe("");
+    expect(applied.session.yearArchives.withdrawals["2024-2025"]?.rows[0].cells.Name).toBe("Past Child");
+    expect(applied.session.yearArchives["student-list"]["2026-2027"]?.rows[0].cells.Name).toBe("Roster");
+
+    const aliasOnly = readMasterSheets({
+      "Withdrawals 2026-2027": [headers, row("Alias Current", "Relocation")],
+    });
+    expect(aliasOnly.snapshot?.tabs.withdrawals.rows[0].cells.Name).toBe("Alias Current");
+    expect(aliasOnly.snapshot?.tabs.withdrawals.columns).toEqual(headers);
+    expect(aliasOnly.yearArchives?.withdrawals["2019-2020"]).toBeNull();
   });
 });
 

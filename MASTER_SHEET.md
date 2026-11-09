@@ -58,6 +58,8 @@ The current year is the tab named `Student List` (school year 2026-2027). `Stude
 
 `Category` is `Other School`, `Leaving Thailand`, `RIS Minburi`, `Relocation`, `Other`, or `Not stated`. Use `Not stated` when the family gave no reason. Do not leave `Reason` blank if you want the file to show that label; write `Not stated` in both `Reason` and `Category`.
 
+The current year is the tab named `Withdrawals` (school year 2026-2027). `Withdrawals 2026-2027` is an optional alias. Past years use the same columns: `Withdrawals 2025-2026`, `Withdrawals 2024-2025`, `Withdrawals 2023-2024`, `Withdrawals 2022-2023`, `Withdrawals 2021-2022`, `Withdrawals 2020-2021`, and `Withdrawals 2019-2020`. A missing tab, or a header-only tab, is an empty year and does not block Reload data. Older years may leave columns blank. To give another dashboard tab the same year buttons, add it to `yearTabSections` in `src/lib/standalone/school-years.ts`.
+
 ## Alumni
 
 `Alumni ID`, `Name`, `Graduating year`, `City`, `Country`, `University`, `Major`, `Consent`, `Offer country`

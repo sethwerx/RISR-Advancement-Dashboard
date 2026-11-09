@@ -1,45 +1,39 @@
-import type { OfficeRow, OfficeTabPayload } from "@/lib/office/types";
+import type { OfficeRow } from "@/lib/office/types";
 import { canonicalGrade, studentGradeLevels } from "@/lib/standalone/grades";
+import {
+  currentSchoolYear,
+  emptyYearMap,
+  missingYearMessage,
+  optionalYearTabTitles,
+  schoolYears,
+  yearTabNames,
+  type SchoolYear,
+  type YearMap,
+} from "@/lib/standalone/school-years";
 
-/** RISR opened in 2019. Newest school year is first. 2026-2027 is the current roster. */
-export const studentListSchoolYears = [
-  "2026-2027",
-  "2025-2026",
-  "2024-2025",
-  "2023-2024",
-  "2022-2023",
-  "2021-2022",
-  "2020-2021",
-  "2019-2020",
-] as const;
+export const studentListSchoolYears = schoolYears;
+export type StudentListSchoolYear = SchoolYear;
+export const currentStudentListYear = currentSchoolYear;
+export type StudentListByYear = YearMap;
 
-export type StudentListSchoolYear = (typeof studentListSchoolYears)[number];
-
-export const currentStudentListYear: StudentListSchoolYear = "2026-2027";
-
-export type StudentListByYear = Record<StudentListSchoolYear, OfficeTabPayload | null>;
-
-export function emptyStudentListsByYear(): StudentListByYear {
-  return Object.fromEntries(studentListSchoolYears.map((year) => [year, null])) as StudentListByYear;
+export function emptyStudentListsByYear(): YearMap {
+  return emptyYearMap();
 }
 
-/** Current year is the merged "Student List" tab, with an optional same-year alias. */
-export function studentListTabNames(year: StudentListSchoolYear): string[] {
-  if (year === currentStudentListYear) return ["Student List", `Student List ${year}`];
-  return [`Student List ${year}`];
+export function studentListTabNames(year: SchoolYear): string[] {
+  return yearTabNames("Student List", year);
 }
 
-/** Past-year tabs and the current-year alias may be absent. Only "Student List" is required. */
 export function studentListTabIsRequired(title: string): boolean {
   return title === "Student List";
 }
 
 export function optionalStudentListTitles(): string[] {
-  return studentListSchoolYears.flatMap((year) => studentListTabNames(year).filter((title) => !studentListTabIsRequired(title)));
+  return optionalYearTabTitles().filter((title) => title.startsWith("Student List"));
 }
 
 export function missingStudentListMessage(year: string): string {
-  return `No student list found for ${year} yet`;
+  return missingYearMessage("student-list", year);
 }
 
 /** Grade buttons for one school year: Weena labels that appear, then any other label in that sheet. */

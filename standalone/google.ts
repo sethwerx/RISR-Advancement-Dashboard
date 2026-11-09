@@ -1,7 +1,7 @@
 import { standaloneSheetTitles } from "@/lib/office/sheet-schema";
 import { isSchoolEmail } from "@/lib/access";
 import { readMasterSheets, studentListReadError, type MasterLoad } from "@/lib/standalone/data";
-import { optionalStudentListTitles, studentListTabIsRequired } from "@/lib/standalone/student-years";
+import { optionalYearTabTitles, yearTabIsRequired } from "@/lib/standalone/school-years";
 import liveConfig from "./live-config.json";
 
 export type OfficeConfig = {
@@ -102,8 +102,8 @@ async function sheetValues(token: string, spreadsheetId: string, title: string):
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!response.ok) {
     const detail = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 240);
-    if (studentListTabIsRequired(title)) return { values: [], error: studentListReadError(response.status, detail) };
-    if (response.status === 400 || optionalStudentListTitles().includes(title)) return { values: [], error: "" };
+    if (yearTabIsRequired(title)) return { values: [], error: studentListReadError(response.status, detail) };
+    if (response.status === 400 || optionalYearTabTitles().includes(title)) return { values: [], error: "" };
     throw new Error(detail ? `Could not read “${title}” (HTTP ${response.status}). ${detail}` : `Could not read “${title}” (HTTP ${response.status}).`);
   }
   const payload = (await response.json()) as { values?: string[][] };
@@ -113,7 +113,7 @@ async function sheetValues(token: string, spreadsheetId: string, title: string):
 export async function loadMasterSheet(token: string, spreadsheetId: string): Promise<MasterLoad> {
   const sheets: Record<string, string[][]> = {};
   let studentListError = "";
-  for (const title of [...standaloneSheetTitles, ...optionalStudentListTitles()]) {
+  for (const title of [...standaloneSheetTitles, ...optionalYearTabTitles()]) {
     const read = await sheetValues(token, spreadsheetId, title);
     sheets[title] = read.values;
     if (title === "Student List" && read.error) studentListError = read.error;

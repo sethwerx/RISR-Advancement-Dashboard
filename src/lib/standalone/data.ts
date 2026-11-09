@@ -6,11 +6,18 @@ import { withNoShowTag } from "@/lib/title";
 import {
   currentStudentListYear,
   emptyStudentListsByYear,
-  studentListSchoolYears,
-  studentListTabNames,
   type StudentListByYear,
-  type StudentListSchoolYear,
 } from "@/lib/standalone/student-years";
+import {
+  currentSchoolYear,
+  emptyYearArchives,
+  emptyYearMap,
+  yearTabNames,
+  yearTabSections,
+  type SchoolYear,
+  type YearArchives,
+  type YearTabId,
+} from "@/lib/standalone/school-years";
 
 export type LocalTour = {
   id: string;
@@ -142,6 +149,7 @@ export type OfficeSession = {
   toursOrigin: DatasetOrigin;
   studentListLoadedAt: string | null;
   studentListsByYear: StudentListByYear;
+  yearArchives: YearArchives;
 };
 
 export type MasterLoad = {
@@ -150,6 +158,7 @@ export type MasterLoad = {
   studentListFromSheet: boolean;
   studentListError?: string;
   studentListsByYear?: StudentListByYear;
+  yearArchives?: YearArchives;
 };
 
 const fictionalStudentNames = ["Ben Rahman", "Chloe Nguyen", "Isla Rahman", "Yusuf Demir"];
@@ -259,25 +268,38 @@ function tableHasData(values: string[][]): boolean {
   return values.length > 1 && values.slice(1).some((row) => row.some((cell) => cell?.trim()));
 }
 
-/** Current roster: "Student List" when it has rows, otherwise the optional "Student List 2026-2027" alias. */
-export function currentStudentListValues(sheets: Record<string, string[][]>): string[][] {
-  const named = studentListTabNames(currentStudentListYear).map((title) => sheetByTitle(sheets, title));
-  return named.find(tableHasData) ?? named.find(sheetHasTable) ?? [];
+/** Current year sheet: the plain tab when it has rows, otherwise the optional "Title 2026-2027" alias. */
+export function currentYearValues(sheets: Record<string, string[][]>, currentTitle: string): string[][] {
+  const named = yearTabNames(currentTitle, currentSchoolYear).map((title) => sheetByTitle(sheets, title));
+  return named.find(tableHasData) ?? named.find((values) => sheetHasTable(values)) ?? [];
 }
 
-function studentListForYear(sheets: Record<string, string[][]>, year: StudentListSchoolYear): OfficeTabPayload | null {
-  const values = year === currentStudentListYear ? currentStudentListValues(sheets) : sheetByTitle(sheets, studentListTabNames(year)[0]);
+/** Current roster: "Student List" when it has rows, otherwise the optional "Student List 2026-2027" alias. */
+export function currentStudentListValues(sheets: Record<string, string[][]>): string[][] {
+  return currentYearValues(sheets, "Student List");
+}
+
+function sectionForYear(sheets: Record<string, string[][]>, id: YearTabId, currentTitle: string, year: SchoolYear): OfficeTabPayload | null {
+  const values = year === currentSchoolYear ? currentYearValues(sheets, currentTitle) : sheetByTitle(sheets, yearTabNames(currentTitle, year)[0]);
   if (!tableHasData(values)) return null;
-  const payload = payloadFromTable("student-list", year === currentStudentListYear ? "Student List" : `Student List ${year}`, values);
+  const payload = payloadFromTable(id, year === currentSchoolYear ? currentTitle : `${currentTitle} ${year}`, values);
   if (!payload || !payload.rows.length) return null;
-  if (year === currentStudentListYear) return payload;
+  if (year === currentSchoolYear) return payload;
   return { ...payload, mismatches: undefined, reconciliation: undefined };
 }
 
+export function readYearArchives(sheets: Record<string, string[][]>): YearArchives {
+  const archives = emptyYearArchives();
+  for (const section of yearTabSections) {
+    const lists = emptyYearMap();
+    for (const year of Object.keys(lists) as SchoolYear[]) lists[year] = sectionForYear(sheets, section.id, section.currentTitle, year);
+    archives[section.id] = lists;
+  }
+  return archives;
+}
+
 export function readStudentListsByYear(sheets: Record<string, string[][]>): StudentListByYear {
-  const lists = emptyStudentListsByYear();
-  for (const year of studentListSchoolYears) lists[year] = studentListForYear(sheets, year);
-  return lists;
+  return readYearArchives(sheets)["student-list"];
 }
 
 /** Student List has no enrollment-year column. A Start date must not become one. */
@@ -414,6 +436,7 @@ export function initialOfficeSession(): OfficeSession {
     toursOrigin: "empty",
     studentListLoadedAt: null,
     studentListsByYear: emptyStudentListsByYear(),
+    yearArchives: emptyYearArchives(),
   };
 }
 
@@ -425,6 +448,7 @@ export function demoOfficeSession(at?: string): OfficeSession {
     toursOrigin: "demo",
     studentListLoadedAt: null,
     studentListsByYear: emptyStudentListsByYear(),
+    yearArchives: emptyYearArchives(),
   };
 }
 
@@ -438,17 +462,30 @@ export function snapshotFromSheets(sheets: Record<string, string[][]>, generated
   const studentPayload = studentFromSheet
     ? payloadFromTable("student-list", "Student List", studentValues) ?? emptyPayload("student-list", "Student List")
     : emptyPayload("student-list", "Student List");
+  const currentBySection = new Map<OfficeTabId, OfficeTabPayload>();
+  for (const section of yearTabSections) {
+    if (section.id === "student-list") {
+      currentBySection.set(section.id, studentPayload);
+      continue;
+    }
+    const values = currentYearValues(sheets, section.currentTitle);
+    currentBySection.set(
+      section.id,
+      sheetHasTable(values) ? payloadFromTable(section.id, section.currentTitle, values) ?? emptyPayload(section.id, section.currentTitle) : emptyPayload(section.id, section.currentTitle),
+    );
+  }
   const decoded = decodeSnapshot(sheetByTitle(sheets, "Snapshot"));
   if (decoded && !snapshotIsSample(decoded)) {
-    decoded.tabs["student-list"] = studentPayload;
+    for (const [id, payload] of currentBySection) decoded.tabs[id] = payload;
     return decoded;
   }
   const tabs = {} as OfficeSnapshot["tabs"];
   let found = false;
   for (const [title, id] of Object.entries(titleToTab) as [string, OfficeTabId][]) {
-    if (id === "student-list") {
-      tabs[id] = studentPayload;
-      if (studentPayload.rows.length) found = true;
+    const current = currentBySection.get(id);
+    if (current) {
+      tabs[id] = current;
+      if (current.rows.length) found = true;
       continue;
     }
     const payload = payloadFromTable(id, title, sheetByTitle(sheets, title));
@@ -472,14 +509,16 @@ export function snapshotFromSheets(sheets: Record<string, string[][]>, generated
 }
 
 export function readMasterSheets(sheets: Record<string, string[][]>, generatedAt = new Date().toISOString()): MasterLoad {
-  const studentListsByYear = readStudentListsByYear(sheets);
+  const yearArchives = readYearArchives(sheets);
   const snapshot = snapshotFromSheets(sheets, generatedAt);
-  if (snapshot?.tabs["student-list"]?.rows.length) studentListsByYear[currentStudentListYear] = snapshot.tabs["student-list"];
+  if (snapshot?.tabs["student-list"]?.rows.length) yearArchives["student-list"][currentSchoolYear] = snapshot.tabs["student-list"];
+  if (snapshot?.tabs.withdrawals?.rows.length) yearArchives.withdrawals[currentSchoolYear] = snapshot.tabs.withdrawals;
   return {
     snapshot,
     tours: tourRowsFromSheets(sheets),
     studentListFromSheet: sheetHasTable(currentStudentListValues(sheets)),
-    studentListsByYear,
+    studentListsByYear: yearArchives["student-list"],
+    yearArchives,
   };
 }
 
@@ -501,6 +540,7 @@ export function applyMasterLoad(
     toursOrigin: current.toursOrigin,
     studentListLoadedAt: current.studentListLoadedAt,
     studentListsByYear: current.studentListsByYear,
+    yearArchives: current.yearArchives,
   };
   if (loaded.tours.length) {
     next.tours = loaded.tours;
@@ -512,7 +552,11 @@ export function applyMasterLoad(
     next.snapshot = incoming;
     next.studentListOrigin = origin;
     next.studentListLoadedAt = at;
-    next.studentListsByYear = { ...emptyStudentListsByYear(), ...(loaded.studentListsByYear ?? {}), [currentStudentListYear]: incoming.tabs["student-list"] };
+    const archives = loaded.yearArchives ?? emptyYearArchives();
+    archives["student-list"] = { ...(loaded.studentListsByYear ?? archives["student-list"]), [currentStudentListYear]: incoming.tabs["student-list"] };
+    if (incoming.tabs.withdrawals?.rows.length) archives.withdrawals = { ...archives.withdrawals, [currentSchoolYear]: incoming.tabs.withdrawals };
+    next.yearArchives = archives;
+    next.studentListsByYear = archives["student-list"];
     return { session: next, error: "" };
   }
   const error = loaded.studentListError || (isFictionalStudentRoster(sheetRows)
@@ -534,6 +578,7 @@ export function applyMasterLoad(
   next.studentListOrigin = "empty";
   next.studentListLoadedAt = null;
   next.studentListsByYear = emptyStudentListsByYear();
+  next.yearArchives = emptyYearArchives();
   if (!loaded.tours.length) {
     next.tours = [];
     next.toursOrigin = "empty";
