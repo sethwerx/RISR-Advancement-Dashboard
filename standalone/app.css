@@ -54,6 +54,7 @@ tr.clickable:hover { background: #f7fafc; }
 .chip, .chip-row .chip { display: inline-block; margin: 0 6px 6px 0; background: #e7edf5; color: var(--navy); border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 700; }
 .chip-row { margin: 12px 0; }
 tr.row-muted { opacity: 0.45; }
+.start-passed { color: #8d2f2f; font-weight: 700; }
 .card h3 { margin: 0 0 8px; color: var(--navy); }
 .notice { background: #fff8ea; border: 1px solid #f0e2c4; padding: 8px 12px; border-radius: 8px; font-size: 14px; }
 .sample-banner, .signin-banner { margin: 12px 0; font-weight: 700; padding: 12px 14px; border-radius: 8px; }

@@ -42,6 +42,7 @@ import { gradeButtonsForRows } from "@/lib/standalone/student-years";
 import { currentSchoolYear, missingYearMessage, yearTabSection, type SchoolYear, type YearArchives } from "@/lib/standalone/school-years";
 import { SchoolYearBar } from "./SchoolYearBar";
 import { AssessmentsPanel, NewStudentsPanel } from "./SchedulePanels";
+import { AdmittedPanel, ApplicantsPanel } from "./PipelinePanels";
 import { emptyScheduleBundle, type ScheduleBundle } from "@/lib/standalone/schedule";
 import { alumniClasses, alumniColumnLabel, defaultAlumniClassYear, filterAlumniByClass, missingAlumniClassMessage, type AlumniClassYear } from "@/lib/standalone/alumni-classes";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
@@ -399,6 +400,10 @@ export function App() {
             onWalkIn={() => setWalkIn(true)}
             onChart={() => setChart({ id: "attendance", title: "Tour attendance", points: attendancePoints(tours) })}
           />
+        ) : tab === "applicants" ? (
+          <ApplicantsPanel rows={snapshot.tabs.applicants?.rows ?? []} syncing={syncState === "loading"} onSync={() => void syncNow()} />
+        ) : tab === "admitted" ? (
+          <AdmittedPanel rows={snapshot.tabs.admitted?.rows ?? []} today={todayIct()} syncing={syncState === "loading"} onSync={() => void syncNow()} />
         ) : tab === "assessments" ? (
           <AssessmentsPanel schedule={sheetSchedule} today={todayIct()} syncing={syncState === "loading"} onSync={() => void syncNow()} />
         ) : tab === "new-students" ? (
