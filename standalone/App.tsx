@@ -40,6 +40,7 @@ import {
 import { gradeButtonsForRows } from "@/lib/standalone/student-years";
 import { currentSchoolYear, missingYearMessage, yearTabSection, type SchoolYear, type YearArchives } from "@/lib/standalone/school-years";
 import { SchoolYearBar } from "./SchoolYearBar";
+import { alumniClasses, alumniColumnLabel, defaultAlumniClassYear, filterAlumniByClass, missingAlumniClassMessage, type AlumniClassYear } from "@/lib/standalone/alumni-classes";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
 
 export function App() {
@@ -536,6 +537,7 @@ function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, ye
   const raw = snapshot.tabs[tab];
   const section = yearTabSection(tab);
   const [schoolYear, setSchoolYear] = useState<SchoolYear>(currentSchoolYear);
+  const [alumniClass, setAlumniClass] = useState<AlumniClassYear | "all">(defaultAlumniClassYear);
   const currentPayload = tab === "student-list" ? presentStudentList(raw, studentListOrigin) : raw;
   const archived = section && schoolYear !== currentSchoolYear ? yearArchives[section.id]?.[schoolYear] ?? null : null;
   const payload = !section
@@ -555,16 +557,20 @@ function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, ye
     setGrade("all");
     setQuery("");
     setSchoolYear(currentSchoolYear);
+    setAlumniClass(defaultAlumniClassYear);
   }, [tab]);
   const rows = useMemo(() => {
-    const byYear = payload.rows.filter((row) => rowInYear(row, section ? "all" : year, tab)).filter((row) => Object.values(row.cells).join(" ").toLowerCase().includes(query.trim().toLowerCase()));
-    const filtered = tab === "student-list" ? filterStudentsByGrade(byYear, grade) : byYear;
+    const byYear = payload.rows
+      .filter((row) => (tab === "alumni" ? true : rowInYear(row, section ? "all" : year, tab)))
+      .filter((row) => Object.values(row.cells).join(" ").toLowerCase().includes(query.trim().toLowerCase()));
+    const byClass = tab === "alumni" ? filterAlumniByClass(byYear, alumniClass) : byYear;
+    const filtered = tab === "student-list" ? filterStudentsByGrade(byClass, grade) : byClass;
     if (!sort) return filtered;
     return [...filtered].sort((a, b) => {
       const compared = (a.cells[sort.column] ?? "").localeCompare(b.cells[sort.column] ?? "", undefined, { numeric: true });
       return sort.dir === "asc" ? compared : -compared;
     });
-  }, [payload.rows, year, query, sort, tab, grade]);
+  }, [payload.rows, year, query, sort, tab, grade, alumniClass, section]);
   return (
     <section>
       <div className="page-head">
@@ -583,6 +589,17 @@ function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, ye
         </div>
       </div>
       {section ? <SchoolYearBar year={schoolYear} onChange={(level) => { setSchoolYear(level); setGrade("all"); }} /> : null}
+      {tab === "alumni" ? (
+        <div className="grade-bar" role="toolbar" aria-label="Graduating classes">
+          <button type="button" className={alumniClass === "all" ? "btn primary" : "btn"} onClick={() => setAlumniClass("all")}>All</button>
+          {alumniClasses.map((item) => (
+            <button key={item.year} type="button" className={alumniClass === item.year ? "btn primary" : "btn"} onClick={() => setAlumniClass(item.year)}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {tab === "alumni" && alumniClass !== "all" && filterAlumniByClass(payload.rows, alumniClass).length === 0 ? <div className="card" role="status"><h3>{missingAlumniClassMessage(alumniClass)}</h3></div> : null}
       {yearMissing && section ? <div className="card" role="status"><h3>{missingYearMessage(section.id, schoolYear)}</h3></div> : null}
       {tab === "student-list" && payload.rows.length ? (
         <div className="grade-bar" role="toolbar" aria-label="Grade levels">
@@ -602,14 +619,14 @@ function OfficePanel({ tab, snapshot, studentListOrigin, studentListLoadedAt, ye
         ))}
       </div>
       <div className="toolbar">
-        {section ? null : <label>Year <select value={year} onChange={(event) => setYear(event.target.value)}>{yearOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All years" : option}</option>)}</select></label>}
+        {section || tab === "alumni" ? null : <label>Year <select value={year} onChange={(event) => setYear(event.target.value)}>{yearOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All years" : option}</option>)}</select></label>}
         <label>Search <input value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       </div>
       {payload.reconciliation ? <div className="card"><h3>Reconciliation</h3><p>{payload.reconciliation.map((item) => `${item.label}: ${item.count}`).join(" · ")}</p>{payload.mismatches?.length ? <ul>{payload.mismatches.map((item) => <li key={`${item.name}-${item.issue}`}>{item.name}: {item.issue}</li>)}</ul> : null}</div> : null}
       {payload.gaps.length ? <div className="card"><h3>Data quality</h3><ul>{payload.gaps.map((gap) => <li key={gap.label}><strong>{gap.label}.</strong> {gap.detail}</li>)}</ul></div> : null}
       <div className="table-wrap">
         <table>
-          <thead><tr>{payload.columns.map((column) => <th key={column}><button type="button" onClick={() => setSort((current) => ({ column, dir: current?.column === column && current.dir === "asc" ? "desc" : "asc" }))}>{column}</button></th>)}</tr></thead>
+          <thead><tr>{payload.columns.map((column) => <th key={column}><button type="button" onClick={() => setSort((current) => ({ column, dir: current?.column === column && current.dir === "asc" ? "desc" : "asc" }))}>{tab === "alumni" ? alumniColumnLabel(column) : column}</button></th>)}</tr></thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.id} className="clickable" onClick={() => onOpen(row)}>

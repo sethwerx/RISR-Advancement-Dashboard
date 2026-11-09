@@ -18,6 +18,7 @@ import {
   type YearArchives,
   type YearTabId,
 } from "@/lib/standalone/school-years";
+import { alumniSheetTitles } from "@/lib/standalone/alumni-classes";
 
 export type LocalTour = {
   id: string;
@@ -279,6 +280,14 @@ export function currentStudentListValues(sheets: Record<string, string[][]>): st
   return currentYearValues(sheets, "Student List");
 }
 
+/** Alumni class tabs share one header. `Alumni` is Class of 2026. `Alumni 2027` and later append under it. */
+export function mergedAlumniValues(sheets: Record<string, string[][]>): string[][] {
+  const tables = alumniSheetTitles().map((title) => sheetByTitle(sheets, title)).filter((values) => sheetHasTable(values));
+  if (!tables.length) return [];
+  const header = tables[0][0];
+  return [header, ...tables.flatMap((table) => table.slice(1))];
+}
+
 function sectionForYear(sheets: Record<string, string[][]>, id: YearTabId, currentTitle: string, year: SchoolYear): OfficeTabPayload | null {
   const values = year === currentSchoolYear ? currentYearValues(sheets, currentTitle) : sheetByTitle(sheets, yearTabNames(currentTitle, year)[0]);
   if (!tableHasData(values)) return null;
@@ -474,9 +483,15 @@ export function snapshotFromSheets(sheets: Record<string, string[][]>, generated
       sheetHasTable(values) ? payloadFromTable(section.id, section.currentTitle, values) ?? emptyPayload(section.id, section.currentTitle) : emptyPayload(section.id, section.currentTitle),
     );
   }
+  const alumniValues = mergedAlumniValues(sheets);
+  const alumniFromSheet = sheetHasTable(alumniValues);
+  const alumniPayload = alumniFromSheet
+    ? payloadFromTable("alumni", "Alumni", alumniValues) ?? emptyPayload("alumni", "Alumni")
+    : null;
   const decoded = decodeSnapshot(sheetByTitle(sheets, "Snapshot"));
   if (decoded && !snapshotIsSample(decoded)) {
     for (const [id, payload] of currentBySection) decoded.tabs[id] = payload;
+    if (alumniPayload) decoded.tabs.alumni = alumniPayload;
     return decoded;
   }
   const tabs = {} as OfficeSnapshot["tabs"];
@@ -486,6 +501,11 @@ export function snapshotFromSheets(sheets: Record<string, string[][]>, generated
     if (current) {
       tabs[id] = current;
       if (current.rows.length) found = true;
+      continue;
+    }
+    if (id === "alumni" && alumniPayload) {
+      tabs[id] = alumniPayload;
+      if (alumniPayload.rows.length) found = true;
       continue;
     }
     const payload = payloadFromTable(id, title, sheetByTitle(sheets, title));

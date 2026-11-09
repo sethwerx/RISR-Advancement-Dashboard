@@ -6,6 +6,7 @@ import { applyMasterLoad, calendarWriteQuery, demoOfficeSession, initialOfficeSe
 import { canonicalGrade, filterStudentsByGrade, studentGradeLevels } from "@/lib/standalone/grades";
 import { currentStudentListYear, gradeButtonsForRows, missingStudentListMessage, studentListSchoolYears, studentListTabIsRequired } from "@/lib/standalone/student-years";
 import { missingYearMessage, optionalYearTabTitles, yearTabIsRequired, yearTabSections } from "@/lib/standalone/school-years";
+import { alumniClasses, alumniColumnLabel, defaultAlumniClassYear, filterAlumniByClass, missingAlumniClassMessage, optionalAlumniSheetTitles } from "@/lib/standalone/alumni-classes";
 import { dashboardTabs, syncControlLabel } from "@/lib/standalone/tabs";
 import { describeSyncSchedule, latestSyncAt, normalizeWebhookUrl, parseSyncSchedule, syncLogAdvanced, syncWebhookBody } from "@/lib/standalone/sync-webhook";
 import type { OfficeRow } from "@/lib/office/types";
@@ -332,6 +333,41 @@ describe("withdrawal school years", () => {
     expect(aliasOnly.snapshot?.tabs.withdrawals.rows[0].cells.Name).toBe("Alias Current");
     expect(aliasOnly.snapshot?.tabs.withdrawals.columns).toEqual(headers);
     expect(aliasOnly.yearArchives?.withdrawals["2019-2020"]).toBeNull();
+  });
+});
+
+describe("alumni classes", () => {
+  const headers = [...masterSheetColumns.Alumni];
+
+  it("merges Alumni and Alumni 2027 and filters the exact graduating year", () => {
+    expect(alumniClasses.map((item) => item.year)).toEqual([2026, 2027]);
+    expect(defaultAlumniClassYear).toBe(2026);
+    expect(optionalAlumniSheetTitles()).toEqual(["Alumni 2027"]);
+    expect(alumniColumnLabel("Alumni ID")).toBe("Student ID");
+    expect(alumniColumnLabel("Graduating year")).toBe("Class Year");
+    expect(missingAlumniClassMessage(2027)).toBe("No Class of 2027 alumni yet");
+    const loaded = readMasterSheets({
+      Alumni: [headers, ["26007", "Ada Example", "2026", "Bangkok", "Thailand", "Chula", "Economics", "Yes", "Thailand"]],
+      "Alumni 2027": [headers],
+      Applicants: [["Name"], ["Still here"]],
+    });
+    const rows = loaded.snapshot?.tabs.alumni.rows ?? [];
+    expect(rows.map((row) => row.cells["Alumni ID"])).toEqual(["26007"]);
+    expect(rows[0]?.gradYear).toBe(2026);
+    expect(filterAlumniByClass(rows, 2026).map((row) => row.cells.Name)).toEqual(["Ada Example"]);
+    expect(filterAlumniByClass(rows, 2027)).toEqual([]);
+    expect(filterAlumniByClass(rows, "all")).toHaveLength(1);
+    expect(loaded.snapshot?.tabs.applicants.rows[0].cells.Name).toBe("Still here");
+    const both = readMasterSheets({
+      Alumni: [headers, ["26007", "Ada Example", "2026", "", "", "", "", "", ""]],
+      "Alumni 2027": [headers, ["27001", "Bea Example", "2027", "", "", "", "", "", ""]],
+    });
+    const merged = both.snapshot?.tabs.alumni.rows ?? [];
+    expect(filterAlumniByClass(merged, 2026).map((row) => row.cells.Name)).toEqual(["Ada Example"]);
+    expect(filterAlumniByClass(merged, 2027).map((row) => row.cells["Alumni ID"])).toEqual(["27001"]);
+    const missing = readMasterSheets({ Applicants: [["Name"], ["Still here"]] });
+    expect(missing.snapshot?.tabs.alumni.rows ?? []).toEqual([]);
+    expect(fictionalSnapshot().tabs.alumni.rows.map((row) => row.cells["Alumni ID"]).sort()).toEqual(["26007", "26008"]);
   });
 });
 
