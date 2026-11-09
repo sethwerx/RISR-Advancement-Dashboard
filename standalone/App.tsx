@@ -23,8 +23,9 @@ import {
   type LocalTour,
   type OfficeSession,
 } from "@/lib/standalone/data";
+import { groupToursByDay, tourCountLabel, type TourDayGroup } from "@/lib/standalone/tour-groups";
 import { buildWalkInTitle } from "@/lib/title";
-import { tourInterval } from "@/lib/time";
+import { todayIct, tourInterval } from "@/lib/time";
 import {
   defaultSyncSchedule,
   describeSyncSchedule,
@@ -494,9 +495,37 @@ function SyncTabButton({ busy, onSync }: { busy: boolean; onSync: () => void }) 
   );
 }
 
+function TourDayTables({ groups, onNoShow, onOpen }: { groups: TourDayGroup[]; onNoShow: (tour: LocalTour) => void; onOpen: (tour: LocalTour) => void }) {
+  return (
+    <>
+      {groups.map((group) => (
+        <div key={group.date || "undated"} className="table-wrap">
+          <table>
+            <thead>
+              <tr className="day-head">
+                <th colSpan={7}>{group.heading}<span className="day-count">{tourCountLabel(group.tours.length)}</span></th>
+              </tr>
+              <tr>{["Time", "Students", "Grade", "Host", "Status", "Attendance", ""].map((header) => <th key={header}>{header}</th>)}</tr>
+            </thead>
+            <tbody>
+              {group.tours.map((tour) => (
+                <tr key={tour.id} className="clickable" onClick={() => onOpen(tour)}>
+                  <td>{tour.time}</td><td><strong>{tour.students}</strong></td><td>{tour.grade}</td><td>{tour.host}</td><td>{tour.status}</td><td>{tour.attendance || "—"}</td>
+                  <td><button className="btn" type="button" onClick={(event) => { event.stopPropagation(); onNoShow(tour); }}>No show</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function ToursPanel({ tours, toursOrigin, logo, syncing, onSync, onNoShow, onOpen, onWalkIn, onChart }: { tours: LocalTour[]; toursOrigin: DatasetOrigin; logo: string; syncing: boolean; onSync: () => void; onNoShow: (tour: LocalTour) => void; onOpen: (tour: LocalTour) => void; onWalkIn: () => void; onChart: () => void }) {
   const [query, setQuery] = useState("");
   const visible = tours.filter((tour) => `${tour.students} ${tour.host} ${tour.date}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const grouped = groupToursByDay(visible, todayIct());
   return (
     <section>
       <div className="page-head">
@@ -515,19 +544,11 @@ function ToursPanel({ tours, toursOrigin, logo, syncing, onSync, onNoShow, onOpe
       <div className="toolbar">
         <label>Search <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name or host" /></label>
       </div>
-      <div className="table-wrap">
-        <table>
-          <thead><tr>{["Date", "Time", "Students", "Grade", "Host", "Status", "Attendance", ""].map((header) => <th key={header}>{header}</th>)}</tr></thead>
-          <tbody>
-            {visible.map((tour) => (
-              <tr key={tour.id} className="clickable" onClick={() => onOpen(tour)}>
-                <td>{tour.date}</td><td>{tour.time}</td><td><strong>{tour.students}</strong></td><td>{tour.grade}</td><td>{tour.host}</td><td>{tour.status}</td><td>{tour.attendance || "—"}</td>
-                <td><button className="btn" type="button" onClick={(event) => { event.stopPropagation(); onNoShow(tour); }}>No show</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {grouped.upcoming.length ? <h3 className="tour-section font-heading">Upcoming</h3> : null}
+      <TourDayTables groups={grouped.upcoming} onNoShow={onNoShow} onOpen={onOpen} />
+      {grouped.past.length ? <h3 className="tour-section font-heading">Past</h3> : null}
+      <TourDayTables groups={grouped.past} onNoShow={onNoShow} onOpen={onOpen} />
+      {!grouped.upcoming.length && !grouped.past.length ? <p className="lede">No Tours/Visits to show.</p> : null}
       {logo ? <p className="lede">Export headers use the navy logo.</p> : null}
     </section>
   );

@@ -43,6 +43,9 @@ button { cursor: pointer; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #5c7388; background: #f7fafc; padding: 8px 12px; }
 td { padding: 8px 12px; border-top: 1px solid var(--line); }
+tr.day-head th { font-family: var(--font-heading); font-size: 16px; letter-spacing: 0; text-transform: none; color: var(--navy); background: #e7eef8; padding: 10px 12px; }
+.day-count { margin-left: 8px; color: #3e556c; font-family: var(--font-body); font-size: 13px; font-weight: 700; }
+.tour-section { margin: 20px 0 8px; color: var(--navy); }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover { background: #f7fafc; }
 .badge { margin-left: 6px; background: #e7edf5; color: var(--navy); border-radius: 999px; padding: 1px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
