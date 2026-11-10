@@ -71,4 +71,6 @@ tr.row-muted { opacity: 0.45; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .export-logo { height: 48px; width: auto; }
 .warn { color: #8d2f2f; font-size: 14px; }
-@media (max-width: 800px) { .kpis, .grid-2 { grid-template-columns: 1fr; } }
+.oh-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.oh-connection { width: min(440px, 100%); }
+@media (max-width: 800px) { .kpis, .grid-2, .oh-grid { grid-template-columns: 1fr; } }

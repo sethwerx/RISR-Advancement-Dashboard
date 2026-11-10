@@ -43,6 +43,7 @@ import { currentSchoolYear, missingYearMessage, yearTabSection, type SchoolYear,
 import { SchoolYearBar } from "./SchoolYearBar";
 import { AssessmentsPanel, NewStudentsPanel } from "./SchedulePanels";
 import { AdmittedPanel, ApplicantsPanel } from "./PipelinePanels";
+import { OpenHousePanel } from "./OpenHousePanel";
 import { emptyScheduleBundle, type ScheduleBundle } from "@/lib/standalone/schedule";
 import { alumniClasses, alumniColumnLabel, defaultAlumniClassYear, filterAlumniByClass, missingAlumniClassMessage, type AlumniClassYear } from "@/lib/standalone/alumni-classes";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
@@ -400,6 +401,8 @@ export function App() {
             onWalkIn={() => setWalkIn(true)}
             onChart={() => setChart({ id: "attendance", title: "Tour attendance", points: attendancePoints(tours) })}
           />
+        ) : tab === "open-house" ? (
+          <OpenHousePanel today={todayIct()} syncing={syncState === "loading"} onSync={() => void syncNow()} />
         ) : tab === "applicants" ? (
           <ApplicantsPanel rows={snapshot.tabs.applicants?.rows ?? []} syncing={syncState === "loading"} onSync={() => void syncNow()} />
         ) : tab === "admitted" ? (

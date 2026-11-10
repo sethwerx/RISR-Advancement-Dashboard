@@ -376,6 +376,7 @@ describe("per-tab sync", () => {
     expect(syncControlLabel).toBe("Sync Now");
     expect(dashboardTabs.map((tab) => tab.label)).toEqual([
       "Tours/Visits",
+      "Open House",
       "Applicants",
       "Assessments",
       "Admitted",

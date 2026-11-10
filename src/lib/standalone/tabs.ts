@@ -1,6 +1,7 @@
 /** Every dashboard section. Each one renders the shared Sync Now control. */
 export const dashboardTabs = [
   { id: "tours", label: "Tours/Visits", enabled: true },
+  { id: "open-house", label: "Open House", enabled: true },
   { id: "applicants", label: "Applicants", enabled: true },
   { id: "assessments", label: "Assessments", enabled: true },
   { id: "admitted", label: "Admitted", enabled: true },
