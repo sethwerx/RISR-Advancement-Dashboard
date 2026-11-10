@@ -1,6 +1,7 @@
 import { standaloneSheetTitles } from "@/lib/office/sheet-schema";
 import { isSchoolEmail } from "@/lib/access";
 import { readMasterSheets, studentListReadError, type MasterLoad } from "@/lib/standalone/data";
+import { TOUR_NOTES_TEMPLATE_DOC_ID, docEndIndex, plainTextFromDoc } from "@/lib/standalone/tour-notes";
 import { optionalYearTabTitles, yearTabIsRequired } from "@/lib/standalone/school-years";
 import { optionalAlumniSheetTitles } from "@/lib/standalone/alumni-classes";
 import { optionalScheduleTitles } from "@/lib/standalone/schedule";
@@ -69,7 +70,7 @@ export function requestSchoolToken(config: OfficeConfig): Promise<string> {
       new Promise((resolve, reject) => {
         const client = window.google!.accounts.oauth2.initTokenClient({
           client_id: config.googleClientId,
-          scope: "openid email https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar",
+          scope: "openid email https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/documents",
           hosted_domain: config.allowedDomain,
           callback: (response) => {
             if (!response.access_token) {
@@ -121,6 +122,35 @@ export async function loadMasterSheet(token: string, spreadsheetId: string): Pro
     if (title === "Student List" && read.error) studentListError = read.error;
   }
   return { ...readMasterSheets(sheets), studentListError };
+}
+
+export async function readCalendarEvent(token: string, calendarId: string, eventId: string): Promise<{ description: string; updated: string; attachments: Array<{ title?: string; fileId?: string; fileUrl?: string }> }> {
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error(`Could not read the calendar event (HTTP ${response.status}).`);
+  const payload = (await response.json()) as { description?: string; updated?: string; attachments?: Array<{ title?: string; fileId?: string; fileUrl?: string }> };
+  return { description: payload.description ?? "", updated: payload.updated ?? "", attachments: payload.attachments ?? [] };
+}
+
+export async function readTourNotesDoc(token: string, docId: string): Promise<{ text: string; endIndex: number }> {
+  if (docId === TOUR_NOTES_TEMPLATE_DOC_ID) return { text: "", endIndex: 2 };
+  const response = await fetch(`https://docs.googleapis.com/v1/documents/${encodeURIComponent(docId)}`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error(`Could not read the Tour Notes doc (HTTP ${response.status}).`);
+  const doc = (await response.json()) as { body?: { content?: Array<{ endIndex?: number; paragraph?: { elements?: Array<{ textRun?: { content?: string } }> } }> } };
+  return { text: plainTextFromDoc(doc), endIndex: docEndIndex(doc) };
+}
+
+export async function writeTourNotesDoc(token: string, docId: string, text: string, endIndex: number): Promise<void> {
+  if (docId === TOUR_NOTES_TEMPLATE_DOC_ID) throw new Error("The tour notes template is not editable from the dashboard.");
+  const requests: Record<string, unknown>[] = [];
+  if (endIndex > 2) requests.push({ deleteContentRange: { range: { startIndex: 1, endIndex: endIndex - 1 } } });
+  requests.push({ insertText: { location: { index: 1 }, text: text.endsWith("\n") ? text : `${text}\n` } });
+  const response = await fetch(`https://docs.googleapis.com/v1/documents/${encodeURIComponent(docId)}:batchUpdate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ requests }),
+  });
+  if (!response.ok) throw new Error(`Could not update the Tour Notes doc (HTTP ${response.status}).`);
 }
 
 export async function calendarWrite(token: string, calendarId: string, path: string, method: "POST" | "PATCH", body: Record<string, unknown>) {

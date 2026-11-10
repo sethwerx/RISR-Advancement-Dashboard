@@ -33,6 +33,7 @@ export type LocalTour = {
   calendarEventId: string;
   title: string;
   note: string;
+  notesDoc?: string;
 };
 
 const titleToTab: Record<string, OfficeTabId> = {
@@ -73,6 +74,7 @@ export function sampleTours(): LocalTour[] {
       calendarEventId: "",
       title: "Tour (OA) - Kiran Desai (G5)",
       note: "",
+      notesDoc: "",
     },
     {
       id: "88002",
@@ -131,6 +133,7 @@ export function toursFromSheet(values: string[][]): LocalTour[] {
         calendarEventId: cell("Calendar event ID"),
         title: students,
         note: cell("Comment") || cell("OA note"),
+        notesDoc: cell("Notes doc"),
       },
     ];
   });

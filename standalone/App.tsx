@@ -13,7 +13,6 @@ import {
   formatLoadedAt,
   initialOfficeSession,
   noShowPatch,
-  notesPatch,
   presentStudentList,
   readMasterSheets,
   signInStudentListMessage,
@@ -44,6 +43,7 @@ import { SchoolYearBar } from "./SchoolYearBar";
 import { AssessmentsPanel, NewStudentsPanel } from "./SchedulePanels";
 import { AdmittedPanel, ApplicantsPanel } from "./PipelinePanels";
 import { OpenHousePanel } from "./OpenHousePanel";
+import { TourNotesSlide } from "./TourNotesSlide";
 import { emptyScheduleBundle, type ScheduleBundle } from "@/lib/standalone/schedule";
 import { alumniClasses, alumniColumnLabel, defaultAlumniClassYear, filterAlumniByClass, missingAlumniClassMessage, type AlumniClassYear } from "@/lib/standalone/alumni-classes";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
@@ -435,10 +435,7 @@ export function App() {
           </section>
         )}
       </main>
-      {selectedTour ? <NotesSlide title={selectedTour.students} detail={[["Date", selectedTour.date], ["Time", selectedTour.time], ["Host", selectedTour.host], ["Attendance", selectedTour.attendance]]} storageKey={`risr.tourNotes.${selectedTour.id}`} onClose={() => setSelectedTour(null)} onSave={async (text) => {
-        if (token && selectedTour.calendarEventId) await calendarWrite(token, config.calendarId, `/events/${encodeURIComponent(selectedTour.calendarEventId)}`, "PATCH", notesPatch(text));
-        setMessage(token && selectedTour.calendarEventId ? "Notes written to Calendar (sendUpdates=none)." : "Notes saved on this computer.");
-      }} /> : null}
+      {selectedTour ? <TourNotesSlide tour={selectedTour} token={token} calendarId={config.calendarId} onClose={() => setSelectedTour(null)} onSynced={setMessage} /> : null}
       {selectedRow ? <NotesSlide title={selectedRow.cells.Name || "Record"} detail={selectedRow.detail.map((item) => [item.label, item.value])} storageKey={`risr.officeNotes.${selectedRow.id}`} onClose={() => setSelectedRow(null)} /> : null}
       {walkIn ? <WalkInDialog onClose={() => setWalkIn(false)} onCreate={createWalkIn} /> : null}
       {chart ? <ChartWindow chart={chart} logo={brand.navy} onClose={() => setChart(null)} /> : null}
