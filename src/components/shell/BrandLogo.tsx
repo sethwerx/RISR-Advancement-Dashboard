@@ -1,0 +1,30 @@
+import { dashboardConfig } from "@/config/dashboard.config";
+
+const files = {
+  onDark: "/brand/logo-white.png",
+  onLight: "/brand/logo-navy.png",
+  iconOnDark: "/brand/icon-white.png",
+  iconOnLight: "/brand/icon-navy.png",
+} as const;
+
+export function BrandLogo({
+  variant = "onDark",
+  className = "h-16 w-auto",
+}: {
+  variant?: keyof typeof files;
+  className?: string;
+}) {
+  return <img src={files[variant]} alt="RISR" className={className} />;
+}
+
+export function ExportBrandHeader({ label }: { label: string }) {
+  return (
+    <div className="mb-2 flex items-center gap-3 border-b border-[#e6eef5] pb-2">
+      <BrandLogo variant="onLight" className="h-16 w-auto" />
+      <div>
+        <p className="font-title text-3xl leading-none text-navy-900">{dashboardConfig.ui.productName}</p>
+        <p className="font-heading text-sm uppercase tracking-[0.14em] text-navy-900">{label}</p>
+      </div>
+    </div>
+  );
+}
