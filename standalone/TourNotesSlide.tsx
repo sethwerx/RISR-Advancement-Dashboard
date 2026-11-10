@@ -40,8 +40,18 @@ export function TourNotesSlide({ tour, token, calendarId, onClose, onSynced }: {
         if (cancel) return;
         setNotes(editor.text);
         setSyncedAt(event.updated);
-        setStatus(editor.migrated ? "An earlier dashboard comment was appended. Save to keep it on the calendar." : "Loaded from the School Tour/Visit calendar.");
-        if (editor.migrated) localStorage.setItem(storageKey, editor.text);
+        if (editor.migrated) {
+          localStorage.setItem(storageKey, editor.text);
+          const description = descriptionWithNotes(event.description, editor.text);
+          await calendarWrite(token, calendarId, `/events/${encodeURIComponent(tour.calendarEventId)}`, "PATCH", { description });
+          if (attachment) await writeTourNotesDoc(token, attachment.fileId, editor.text, endIndex);
+          const refreshed = await readCalendarEvent(token, calendarId, tour.calendarEventId);
+          if (cancel) return;
+          setSyncedAt(refreshed.updated);
+          setStatus("An earlier dashboard comment was appended to the calendar notes.");
+        } else if (!cancel) {
+          setStatus("Loaded from the School Tour/Visit calendar.");
+        }
       } catch (reason) {
         if (cancel) return;
         const fallback = notesForEditor({ description: "", docText: "", localComment: local });
