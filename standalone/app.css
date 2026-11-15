@@ -38,6 +38,8 @@ button { cursor: pointer; }
 .toolbar, .grade-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: end; }
 .toolbar label { font-size: 14px; }
 .btn { border: 1px solid var(--line); background: white; color: var(--navy); border-radius: 6px; padding: 8px 12px; font-weight: 600; }
+a.btn { display: inline-block; text-decoration: none; }
+button.btn:disabled { cursor: not-allowed; }
 .btn.primary { background: var(--navy); color: white; border-color: var(--navy); }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }

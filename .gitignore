@@ -9,3 +9,4 @@ coverage
 data/*.json
 data/*.tmp
 npm-debug.log*
+apps-script/.clasp.json

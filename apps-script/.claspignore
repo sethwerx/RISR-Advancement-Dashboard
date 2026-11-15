@@ -1,0 +1,4 @@
+DEPLOY.md
+.clasp.json.example
+**/*.md
+.git/**
