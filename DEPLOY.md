@@ -1,10 +1,18 @@
 # Deploy the Advancement Office dashboard
 
-Use **Vercel**. The app is a Next.js site, and the weekday sync has to be an external clock. A normal server process on Vercel shuts down between clicks, so the in-app 05:55 timer would not fire. `vercel.json` asks Vercel Cron to call `/api/cron/sync` at **22:55 UTC, Sunday through Thursday**. That is **05:55 Asia/Bangkok, Monday through Friday**. Thailand does not use daylight saving time.
+Staff open this as a Google Apps Script web app, from **admissions@risr.ac.th**, limited to **Anyone within risr.ac.th**. Execute as **User accessing the web app**. The step-by-step list, the five OAuth scopes, and the permission lines Google shows are in [apps-script/DEPLOY.md](apps-script/DEPLOY.md).
 
-A school VM is the alternative only if you want one machine that stays on. This guide is the Vercel path.
+The iMac file is not replaced. **Open Advancement Office.command** still serves `dist/advancement-office.html` at `http://localhost:4173`.
 
-Do not put secrets in Git. Paste them only into Vercel’s environment settings.
+Do not put secrets in Git. This web app does not need Script Properties. OpenApply credentials stay out of the code.
+
+## Previous Next.js host on Vercel
+
+Use this section only for the older Next.js site. The weekday sync has to be an external clock. A normal server process on Vercel shuts down between clicks, so the in-app 05:55 timer would not fire. `vercel.json` asks Vercel Cron to call `/api/cron/sync` at **22:55 UTC, Sunday through Thursday**. That is **05:55 Asia/Bangkok, Monday through Friday**. Thailand does not use daylight saving time.
+
+A school VM is the alternative only if you want one machine that stays on. The rest of this file is the Vercel path.
+
+Paste secrets only into Vercel’s environment settings.
 
 ## 1. Create the Vercel project
 

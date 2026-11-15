@@ -404,6 +404,7 @@ describe("local calendar writes", () => {
     });
     expect(body).not.toHaveProperty("conferenceData");
     expect(JSON.stringify(body)).not.toMatch(/hangout|conference/i);
+    expect(JSON.stringify(body)).not.toMatch(/OA Registration ID/i);
     expect(calendarWriteQuery()).toBe("sendUpdates=none");
     expect(noShowPatch("Tour (OA) - Ada Example (G3)").summary).toContain("[No Show]");
   });

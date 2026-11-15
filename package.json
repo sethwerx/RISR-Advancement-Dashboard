@@ -8,7 +8,8 @@
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "standalone": "node scripts/build-standalone.mjs"
+    "standalone": "node scripts/build-standalone.mjs",
+    "apps-script": "node scripts/build-apps-script.mjs"
   },
   "dependencies": {
     "@fontsource/bebas-neue": "^5.3.0",

@@ -46,6 +46,9 @@ import { OpenHousePanel } from "./OpenHousePanel";
 import { TourNotesSlide } from "./TourNotesSlide";
 import { emptyScheduleBundle, type ScheduleBundle } from "@/lib/standalone/schedule";
 import { alumniClasses, alumniColumnLabel, defaultAlumniClassYear, filterAlumniByClass, missingAlumniClassMessage, type AlumniClassYear } from "@/lib/standalone/alumni-classes";
+import { appsScriptHost } from "@/lib/standalone/apps-script-host";
+import { postJson } from "@/lib/standalone/remote-post";
+import { WALK_IN_UNSET_LABEL, normalizeWalkInUrl, resolveWalkInUrl, walkInButtonLabel, walkInUrlStorageKey } from "@/lib/standalone/walk-in-link";
 import { assertSchoolAccount, calendarWrite, fileProtocolBlocked, loadMasterSheet, readConfig, requestSchoolToken } from "./google";
 
 export function App() {
@@ -73,6 +76,10 @@ export function App() {
   const [chart, setChart] = useState<OfficeChart | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [webhookDraft, setWebhookDraft] = useState(() => localStorage.getItem(webhookStorageKey()) ?? "");
+  const [walkInSaved, setWalkInSaved] = useState<string | null>(() => localStorage.getItem(walkInUrlStorageKey()));
+  const [walkInDraft, setWalkInDraft] = useState(() => localStorage.getItem(walkInUrlStorageKey()) ?? "");
+  const [runtimeWalkInUrl, setRuntimeWalkInUrl] = useState("");
+  const walkInUrl = resolveWalkInUrl(walkInSaved, runtimeWalkInUrl);
   const [schedule, setSchedule] = useState<SyncSchedule>(() => parseSyncSchedule(localStorage.getItem(scheduleStorageKey())));
   const [syncState, setSyncState] = useState<"idle" | "loading" | "success" | "failure">("idle");
 
@@ -95,11 +102,16 @@ export function App() {
 
   async function signIn() {
     setError("");
-    if (fileProtocolBlocked()) {
+    if (appsScriptHost()) setRuntimeWalkInUrl(window.ADVANCEMENT_OFFICE_APPS_SCRIPT?.walkInUrl ?? "");
+    if (appsScriptHost() && fileProtocolBlocked()) {
+      setError("This file is the Apps Script page. Open the deployed web app URL. The iMac file is dist/advancement-office.html.");
+      return;
+    }
+    if (!appsScriptHost() && fileProtocolBlocked()) {
       setError("Google sign-in cannot run from a file:// page. Use Load data file, or open this file from http://localhost. See STANDALONE.md.");
       return;
     }
-    if (!config.googleClientId || config.googleClientId.includes("YOUR_")) {
+    if (!appsScriptHost() && (!config.googleClientId || config.googleClientId.includes("YOUR_"))) {
       setError("Paste the public OAuth client ID into the config block at the top of this file.");
       return;
     }
@@ -110,6 +122,7 @@ export function App() {
     try {
       const access = await requestSchoolToken(config);
       const account = await assertSchoolAccount(access, config.allowedDomain);
+      if (appsScriptHost()) setRuntimeWalkInUrl(window.ADVANCEMENT_OFFICE_APPS_SCRIPT?.walkInUrl ?? "");
       setToken(access);
       setEmail(account);
       try {
@@ -117,23 +130,31 @@ export function App() {
         const applied = applyMasterLoad(sessionRef.current, loaded, new Date().toISOString());
         commitSession(applied.session);
         const count = applied.session.studentListOrigin === "sheet" ? applied.session.snapshot.tabs["student-list"].rows.length : 0;
+        const who = account || `your @${config.allowedDomain} account`;
         if (applied.error) {
           setError(applied.error);
-          setMessage(`Signed in as ${account}. Student List: ${count} rows.`);
+          setMessage(`Signed in as ${who}. Student List: ${count} rows.`);
         } else {
           setError("");
-          setMessage(`Signed in as ${account}. Student List: ${count} rows.`);
+          setMessage(`Signed in as ${who}. Student List: ${count} rows.`);
         }
       } catch (reason) {
         const cleared = applyMasterLoad(sessionRef.current, { snapshot: null, tours: [], studentListFromSheet: false }, new Date().toISOString());
         commitSession(cleared.session);
         setError(reason instanceof Error ? reason.message : "Could not read the master sheet.");
-        setMessage(`Signed in as ${account}. Student List: 0 rows.`);
+        setMessage(`Signed in as ${account || `your @${config.allowedDomain} account`}. Student List: 0 rows.`);
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Sign-in failed.");
     }
   }
+
+  useEffect(() => {
+    if (!appsScriptHost()) return;
+    void signIn();
+    // The web app is already authorized. Load that account once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function onFile(file: File) {
     const reader = new FileReader();
@@ -232,6 +253,7 @@ export function App() {
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "advancement-office-data.json";
+    link.target = "_self";
     link.click();
   }
 
@@ -280,8 +302,18 @@ export function App() {
       setError("Paste a full https webhook URL from the Grok Bot routine panel.");
       return;
     }
+    const walkInRaw = walkInDraft.trim();
+    const walkInStored = walkInRaw ? normalizeWalkInUrl(walkInRaw) : null;
+    if (walkInRaw && !walkInStored) {
+      setError("The Walk-in URL must be a full https address, or leave it blank.");
+      return;
+    }
     localStorage.setItem(webhookStorageKey(), url);
     localStorage.setItem(scheduleStorageKey(), JSON.stringify(schedule));
+    if (walkInStored) localStorage.setItem(walkInUrlStorageKey(), walkInStored);
+    else localStorage.removeItem(walkInUrlStorageKey());
+    setWalkInSaved(walkInStored);
+    setWalkInDraft(walkInStored ?? "");
     setWebhookDraft(url);
     setSettingsOpen(false);
     setError("");
@@ -302,12 +334,7 @@ export function App() {
     const before = latestSyncAt(snapshot.syncLog);
     try {
       const savedSchedule = parseSyncSchedule(localStorage.getItem(scheduleStorageKey()));
-      const response = await fetch(url, {
-        method: "POST",
-        mode: "cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(syncWebhookBody(savedSchedule)),
-      });
+      const response = await postJson(url, syncWebhookBody(savedSchedule));
       if (!response.ok) throw new Error(`The webhook returned ${response.status}.`);
       setSyncState("success");
       setMessage("Sync requested. Waiting for a new Sync Log row in the master sheet.");
@@ -360,7 +387,7 @@ export function App() {
                 {syncState === "loading" ? "Requesting…" : "Sync Now"}
               </button>
             ) : null}
-            <button className="btn" type="button" aria-label="Sync webhook settings" onClick={() => setSettingsOpen(true)}>
+            <button className="btn" type="button" aria-label="Settings" onClick={() => setSettingsOpen(true)}>
               Settings
             </button>
             <button className="btn" type="button" onClick={() => void reloadData()} disabled={reloadState === "loading"}>
@@ -398,6 +425,7 @@ export function App() {
             onSync={() => void syncNow()}
             onNoShow={(tour) => void markNoShow(tour).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Calendar update failed."))}
             onOpen={setSelectedTour}
+            walkInUrl={walkInUrl}
             onWalkIn={() => setWalkIn(true)}
             onChart={() => setChart({ id: "attendance", title: "Tour attendance", points: attendancePoints(tours) })}
           />
@@ -483,6 +511,12 @@ export function App() {
                 </label>
               ) : null}
               <p className="lede">{describeSyncSchedule(schedule)}. Changing this here does not edit the Grok Bot clock until Sync Now sends it.</p>
+              <h3 className="font-heading">Walk-in</h3>
+              <p className="lede">Optional https address for the staff walk-in screen. Leave this blank to use the built-in address on the Apps Script site. On the iMac file, a blank address leaves the Tours/Visits button as “{WALK_IN_UNSET_LABEL}”.</p>
+              <label>
+                Walk-in URL
+                <input value={walkInDraft} onChange={(event) => setWalkInDraft(event.target.value)} placeholder={runtimeWalkInUrl || "https://"} autoComplete="off" />
+              </label>
               <button className="btn primary" type="submit">Save</button>
             </div>
           </form>
@@ -536,7 +570,23 @@ function TourDayTables({ groups, onNoShow, onOpen }: { groups: TourDayGroup[]; o
   );
 }
 
-function ToursPanel({ tours, toursOrigin, logo, syncing, onSync, onNoShow, onOpen, onWalkIn, onChart }: { tours: LocalTour[]; toursOrigin: DatasetOrigin; logo: string; syncing: boolean; onSync: () => void; onNoShow: (tour: LocalTour) => void; onOpen: (tour: LocalTour) => void; onWalkIn: () => void; onChart: () => void }) {
+function WalkInAppButton({ url }: { url: string }) {
+  const label = walkInButtonLabel(url);
+  if (!url) {
+    return (
+      <button className="btn" type="button" disabled data-walk-in="unset">
+        {label}
+      </button>
+    );
+  }
+  return (
+    <a className="btn" href={url} target="_top" rel="noopener noreferrer" data-walk-in="ready">
+      {label}
+    </a>
+  );
+}
+
+function ToursPanel({ tours, toursOrigin, logo, syncing, onSync, onNoShow, onOpen, onWalkIn, onChart, walkInUrl }: { tours: LocalTour[]; toursOrigin: DatasetOrigin; logo: string; syncing: boolean; onSync: () => void; onNoShow: (tour: LocalTour) => void; onOpen: (tour: LocalTour) => void; onWalkIn: () => void; onChart: () => void; walkInUrl: string }) {
   const [query, setQuery] = useState("");
   const visible = tours.filter((tour) => `${tour.students} ${tour.host} ${tour.date}`.toLowerCase().includes(query.trim().toLowerCase()));
   const grouped = groupToursByDay(visible, todayIct());
@@ -552,6 +602,7 @@ function ToursPanel({ tours, toursOrigin, logo, syncing, onSync, onNoShow, onOpe
         <div className="header-actions">
           <SyncTabButton busy={syncing} onSync={onSync} />
           <button className="btn" type="button" onClick={onChart}>Attendance chart</button>
+          <WalkInAppButton url={walkInUrl} />
           <button className="btn primary" type="button" onClick={onWalkIn}>New Walk-in Tour</button>
         </div>
       </div>
@@ -741,6 +792,7 @@ function ChartWindow({ chart, logo, onClose }: { chart: OfficeChart; logo: strin
       const link = document.createElement("a");
       link.href = dataUrl;
       link.download = `${chart.id}.png`;
+      link.target = "_self";
       link.click();
       return;
     }

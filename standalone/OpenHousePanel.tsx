@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { postJson } from "@/lib/standalone/remote-post";
 import { normalizeWebhookUrl } from "@/lib/standalone/sync-webhook";
 import { syncControlLabel } from "@/lib/standalone/tabs";
 import {
@@ -68,12 +69,7 @@ export function OpenHousePanel({ today, syncing, onSync }: { today: string; sync
     const requestedAt = new Date().toISOString();
     const body = openHouseDuplicateBody({ division, date, start: starts[division], end: ends[division], requestedAt });
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        mode: "cors",
-        headers: { "Content-Type": "application/json", Authorization: authorization },
-        body: JSON.stringify(body),
-      });
+      const response = await postJson(url, body, { Authorization: authorization });
       if (!response.ok) throw new Error(`The request failed (HTTP ${response.status}).`);
       const next = rememberOpenHouseRequest(recent, { division, date, requestedAt });
       localStorage.setItem(openHouseRecentKey(), JSON.stringify(next));

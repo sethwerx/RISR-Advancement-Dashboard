@@ -1,10 +1,9 @@
-import { standaloneSheetTitles } from "@/lib/office/sheet-schema";
 import { isSchoolEmail } from "@/lib/access";
-import { readMasterSheets, studentListReadError, type MasterLoad } from "@/lib/standalone/data";
+import { readMasterSheets, type MasterLoad } from "@/lib/standalone/data";
 import { TOUR_NOTES_TEMPLATE_DOC_ID, docEndIndex, plainTextFromDoc } from "@/lib/standalone/tour-notes";
-import { optionalYearTabTitles, yearTabIsRequired } from "@/lib/standalone/school-years";
-import { optionalAlumniSheetTitles } from "@/lib/standalone/alumni-classes";
-import { optionalScheduleTitles } from "@/lib/standalone/schedule";
+import { APPS_SCRIPT_TOKEN, appsScriptHost, runAppsScript, type AppsScriptBootstrap } from "@/lib/standalone/apps-script-host";
+import { assertCalendarRequest, isAllowedGoogleApiUrl } from "@/lib/standalone/google-proxy";
+import { chunkList, interpretSheetResponse, masterSheetReadTitles, SHEET_READ_BATCH, sheetA1Range } from "@/lib/standalone/sheet-read";
 import liveConfig from "./live-config.json";
 
 export type OfficeConfig = {
@@ -65,6 +64,15 @@ function loadGis(): Promise<void> {
 }
 
 export function requestSchoolToken(config: OfficeConfig): Promise<string> {
+  if (appsScriptHost()) {
+    return runAppsScript<AppsScriptBootstrap>("clientBootstrap").then((boot) => {
+      window.ADVANCEMENT_OFFICE_APPS_SCRIPT = {
+        email: (boot?.email || "").toLowerCase(),
+        walkInUrl: boot?.walkInUrl || "",
+      };
+      return APPS_SCRIPT_TOKEN;
+    });
+  }
   return loadGis().then(
     () =>
       new Promise((resolve, reject) => {
@@ -86,6 +94,11 @@ export function requestSchoolToken(config: OfficeConfig): Promise<string> {
 }
 
 export async function assertSchoolAccount(token: string, domain: string): Promise<string> {
+  if (token === APPS_SCRIPT_TOKEN) {
+    const email = (window.ADVANCEMENT_OFFICE_APPS_SCRIPT?.email ?? "").toLowerCase();
+    if (email && !isSchoolEmail(email, domain)) throw new Error(`Sign in with a @${domain} account.`);
+    return email;
+  }
   const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -99,24 +112,58 @@ export async function assertSchoolAccount(token: string, domain: string): Promis
   return email;
 }
 
-async function sheetValues(token: string, spreadsheetId: string, title: string): Promise<{ values: string[][]; error: string }> {
-  const range = `'${title.replaceAll("'", "''")}'!A1:AZ5000`;
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}`;
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) {
-    const detail = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 240);
-    if (yearTabIsRequired(title)) return { values: [], error: studentListReadError(response.status, detail) };
-    if (response.status === 400 || optionalYearTabTitles().includes(title) || optionalAlumniSheetTitles().includes(title) || optionalScheduleTitles().includes(title)) return { values: [], error: "" };
-    throw new Error(detail ? `Could not read “${title}” (HTTP ${response.status}). ${detail}` : `Could not read “${title}” (HTTP ${response.status}).`);
+type RemoteResponse = { ok: boolean; status: number; text: string };
+
+async function authorizedFetch(token: string, url: string, init: { method?: "GET" | "POST" | "PATCH"; body?: string } = {}): Promise<RemoteResponse> {
+  const method = init.method || "GET";
+  if (token === APPS_SCRIPT_TOKEN) {
+    if (!isAllowedGoogleApiUrl(url)) throw new Error("That Google address is not used by this dashboard.");
+    const result = await runAppsScript<{ status?: number; body?: string }>("proxyApi", [
+      { purpose: "google", url, method, body: init.body || "" },
+    ]);
+    const status = Number(result?.status) || 0;
+    return { ok: status >= 200 && status < 300, status, text: result?.body ?? "" };
   }
-  const payload = (await response.json()) as { values?: string[][] };
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: init.body,
+  });
+  return { ok: response.ok, status: response.status, text: await response.text() };
+}
+
+async function sheetValues(token: string, spreadsheetId: string, title: string): Promise<{ values: string[][]; error: string }> {
+  const range = sheetA1Range(title);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}`;
+  const response = await authorizedFetch(token, url);
+  if (!response.ok) return interpretSheetResponse(title, response.status, [], response.text);
+  const payload = JSON.parse(response.text || "{}") as { values?: string[][] };
   return { values: payload.values ?? [], error: "" };
 }
 
-export async function loadMasterSheet(token: string, spreadsheetId: string): Promise<MasterLoad> {
+async function loadMasterSheetViaAppsScript(spreadsheetId: string): Promise<MasterLoad> {
   const sheets: Record<string, string[][]> = {};
   let studentListError = "";
-  for (const title of [...standaloneSheetTitles, ...optionalYearTabTitles(), ...optionalAlumniSheetTitles(), ...optionalScheduleTitles()]) {
+  for (const chunk of chunkList(masterSheetReadTitles(), SHEET_READ_BATCH)) {
+    const rows = await runAppsScript<Array<{ title: string; status: number; values?: string[][]; detail?: string }>>("readSheetBatch", [spreadsheetId, chunk]);
+    if (!Array.isArray(rows)) throw new Error("The master sheet read did not return a list.");
+    for (const row of rows) {
+      const interpreted = interpretSheetResponse(row.title, Number(row.status) || 0, row.values, row.detail || "");
+      sheets[row.title] = interpreted.values;
+      if (row.title === "Student List" && interpreted.error) studentListError = interpreted.error;
+    }
+  }
+  return { ...readMasterSheets(sheets), studentListError };
+}
+
+export async function loadMasterSheet(token: string, spreadsheetId: string): Promise<MasterLoad> {
+  if (token === APPS_SCRIPT_TOKEN) return loadMasterSheetViaAppsScript(spreadsheetId);
+  const sheets: Record<string, string[][]> = {};
+  let studentListError = "";
+  for (const title of masterSheetReadTitles()) {
     const read = await sheetValues(token, spreadsheetId, title);
     sheets[title] = read.values;
     if (title === "Student List" && read.error) studentListError = read.error;
@@ -126,17 +173,17 @@ export async function loadMasterSheet(token: string, spreadsheetId: string): Pro
 
 export async function readCalendarEvent(token: string, calendarId: string, eventId: string): Promise<{ description: string; updated: string; attachments: Array<{ title?: string; fileId?: string; fileUrl?: string }> }> {
   const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const response = await authorizedFetch(token, url);
   if (!response.ok) throw new Error(`Could not read the calendar event (HTTP ${response.status}).`);
-  const payload = (await response.json()) as { description?: string; updated?: string; attachments?: Array<{ title?: string; fileId?: string; fileUrl?: string }> };
+  const payload = JSON.parse(response.text || "{}") as { description?: string; updated?: string; attachments?: Array<{ title?: string; fileId?: string; fileUrl?: string }> };
   return { description: payload.description ?? "", updated: payload.updated ?? "", attachments: payload.attachments ?? [] };
 }
 
 export async function readTourNotesDoc(token: string, docId: string): Promise<{ text: string; endIndex: number }> {
   if (docId === TOUR_NOTES_TEMPLATE_DOC_ID) return { text: "", endIndex: 2 };
-  const response = await fetch(`https://docs.googleapis.com/v1/documents/${encodeURIComponent(docId)}`, { headers: { Authorization: `Bearer ${token}` } });
+  const response = await authorizedFetch(token, `https://docs.googleapis.com/v1/documents/${encodeURIComponent(docId)}`);
   if (!response.ok) throw new Error(`Could not read the Tour Notes doc (HTTP ${response.status}).`);
-  const doc = (await response.json()) as { body?: { content?: Array<{ endIndex?: number; paragraph?: { elements?: Array<{ textRun?: { content?: string } }> } }> } };
+  const doc = JSON.parse(response.text || "{}") as { body?: { content?: Array<{ endIndex?: number; paragraph?: { elements?: Array<{ textRun?: { content?: string } }> } }> } };
   return { text: plainTextFromDoc(doc), endIndex: docEndIndex(doc) };
 }
 
@@ -145,9 +192,8 @@ export async function writeTourNotesDoc(token: string, docId: string, text: stri
   const requests: Record<string, unknown>[] = [];
   if (endIndex > 2) requests.push({ deleteContentRange: { range: { startIndex: 1, endIndex: endIndex - 1 } } });
   requests.push({ insertText: { location: { index: 1 }, text: text.endsWith("\n") ? text : `${text}\n` } });
-  const response = await fetch(`https://docs.googleapis.com/v1/documents/${encodeURIComponent(docId)}:batchUpdate`, {
+  const response = await authorizedFetch(token, `https://docs.googleapis.com/v1/documents/${encodeURIComponent(docId)}:batchUpdate`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ requests }),
   });
   if (!response.ok) throw new Error(`Could not update the Tour Notes doc (HTTP ${response.status}).`);
@@ -156,11 +202,9 @@ export async function writeTourNotesDoc(token: string, docId: string, text: stri
 export async function calendarWrite(token: string, calendarId: string, path: string, method: "POST" | "PATCH", body: Record<string, unknown>) {
   if ("conferenceData" in body) throw new Error("Calendar writes cannot include Meet.");
   const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}${path}?sendUpdates=none`;
-  const response = await fetch(url, {
-    method,
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const payload = JSON.stringify(body);
+  assertCalendarRequest(method, url, payload);
+  const response = await authorizedFetch(token, url, { method, body: payload });
   if (!response.ok) throw new Error(`Calendar update failed (${response.status}).`);
-  return (await response.json()) as { id?: string };
+  return JSON.parse(response.text || "{}") as { id?: string };
 }
